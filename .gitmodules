@@ -10,3 +10,6 @@
 [submodule "src/gameEngine/Pacbot-High-Level"]
 	path = src/gameEngine/Pacbot-High-Level
 	url = https://github.com/princeton-robotics-club/Pacbot-High-Level.git
+[submodule "src/decisionModule/Pacbot-High-Level"]
+	path = src/decisionModule/Pacbot-High-Level
+	url = https://github.com/princeton-robotics-club/Pacbot-High-Level.git
