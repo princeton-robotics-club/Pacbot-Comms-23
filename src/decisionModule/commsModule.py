@@ -10,8 +10,6 @@ from rl.variables import o, O
 from messages import MsgType, message_buffers, LightState, PacmanState
 
 
-
-
 GAME_ENGINE_ADDRESS = os.environ.get("BIND_ADDRESS","localhost")
 GAME_ENGINE_PORT = os.environ.get("BIND_PORT", 11297)
 GAME_ENGINE_FREQUENCY = 0
@@ -64,6 +62,7 @@ class GameEngineClient(ProtoModule):
             "score": msg.score,
             "dt": self.frightened_timer,
             "orientation": self.orientation,
+            "game_state": msg.GameMode,
         }
 
     def _update_pellets(self, msg):
@@ -94,9 +93,8 @@ class GameEngineClient(ProtoModule):
     A   -   Action
     EOF -   End of File ( \n )
 
-   
     """
-    def _encode_command(self, action, game_state):
+    def _encode_command(self, action : int):
         BOF = b'01111100' # ASCII: |
         EOF = b'00001010' # ASCII: \n
 
@@ -104,16 +102,13 @@ class GameEngineClient(ProtoModule):
         encoded_count = format(self.command_count, '032b')
 
         # get game state
-        encoded_game_state = 
+        encoded_game_state = format(self.state['game_state'], '032b')
 
         # get action
         encoded_action = self._encode_action(action)
 
         command_arr = [BOF, encoded_count, encoded_game_state, encoded_action,  EOF]
 
-
-
-        
         command = b''.join(command_arr)
         self.command_count += 1
         return command
@@ -135,9 +130,22 @@ class GameEngineClient(ProtoModule):
     FB  -   Forward (0) / Backward (1)
     N   -   Distance to move
     """
-    def _encode_action(self, action):
+    def _encode_action(self, action : int):
 
-        return action
+        action_arr = []
+
+        # change facing direction
+        if action == :
+            action = b'0'
+            pass
+
+        # moves the robot
+        elif action == :
+
+            pass
+
+        encoded_action = b''.join(action_arr)
+        return encoded_action
 
     def msg_received(self, msg, msg_type):
         if msg_type == MsgType.LIGHT_STATE:
@@ -151,7 +159,8 @@ class GameEngineClient(ProtoModule):
                 self.orientation = action - 4
             # TODO write message here
             # will probably be the bluetooth code here
-            self.write()
+            encoded_cmd = self._encode_command(action)
+            self.write(encoded_cmd, )
             # possibly use CV position message as an ack
 
 
