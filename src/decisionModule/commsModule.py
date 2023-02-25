@@ -10,10 +10,15 @@ from Pacbot_High_Level.policies.high_level_policy import HighLevelPolicy
 from Pacbot_High_Level.rl.grid import grid
 from Pacbot_High_Level.rl.variables import o, O
 from Pacbot_High_Level.constants import *
+import pickle
 
 
 GAME_ENGINE_ADDRESS = os.environ.get("BIND_ADDRESS","localhost")
 GAME_ENGINE_PORT = os.environ.get("BIND_PORT", 11297)
+# Use windows IP when connecting to Jack's computer
+# GAME_ENGINE_ADDRESS = os.environ.get("BIND_ADDRESS","10.9.186.78") # Pie
+# GAME_ENGINE_ADDRESS = os.environ.get("BIND_ADDRESS","10.9.75.197")
+# GAME_ENGINE_PORT = os.environ.get("BIND_PORT", 11297)
 GAME_ENGINE_FREQUENCY = 24.0
 
 
@@ -116,7 +121,7 @@ class GameEngineClient(ProtoModule):
 
         command_arr = [BOF, encoded_count, encoded_game_state, encoded_action,  EOF]
 
-        command = bitstring.Bits('').join(command_arr).bin
+        command = bitstring.Bits('').join(command_arr).bytes # needs to be written as bytes
         self.command_count += 1
         return command
 
@@ -170,6 +175,7 @@ class GameEngineClient(ProtoModule):
         # TODO: handle bluetooth connection failure
         self.ser.write(encoded_cmd)
 
+
     def msg_received(self, msg, msg_type):
         if msg_type == MsgType.LIGHT_STATE:
             self._update_pellets(msg)
@@ -184,8 +190,10 @@ class GameEngineClient(ProtoModule):
                 self.orientation = action - 4
             # send message
             encoded_cmd = self._encode_command(action)
+            print(self.state)
+            print(action)
             print(encoded_cmd)
-            # self._write(encoded_cmd)
+            self._write(encoded_cmd)
             # possibly use CV position message as an ack
 
 
