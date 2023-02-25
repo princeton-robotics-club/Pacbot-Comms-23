@@ -1,24 +1,27 @@
 #!/usr/bin/env python3
 
 import os
+import bitstring
 import numpy as np
 from robomodules import ProtoModule
-from constants import UP, STAY, FACE_UP
-from policies.high_level_policy import HighLevelPolicy
-from rl.grid import grid
-from rl.variables import o, O
 from messages import MsgType, message_buffers, LightState, PacmanState
+import serial
+from Pacbot_High_Level.policies.high_level_policy import HighLevelPolicy
+from Pacbot_High_Level.rl.grid import grid
+from Pacbot_High_Level.rl.variables import o, O
+from Pacbot_High_Level.constants import *
 
 
 GAME_ENGINE_ADDRESS = os.environ.get("BIND_ADDRESS","localhost")
 GAME_ENGINE_PORT = os.environ.get("BIND_PORT", 11297)
-GAME_ENGINE_FREQUENCY = 0
+GAME_ENGINE_FREQUENCY = 24.0
+
 
 class GameEngineClient(ProtoModule):
     def __init__(self, addr, port):
         self.subscriptions = [MsgType.LIGHT_STATE]
         super().__init__(addr, port, message_buffers, MsgType, GAME_ENGINE_FREQUENCY, self.subscriptions)
-        self.policy = HighLevelPolicy()
+        self.policy = HighLevelPolicy(debug=False)
         self.state = None
 
         self.power_pellets = {
@@ -37,6 +40,8 @@ class GameEngineClient(ProtoModule):
         self.last_score = 0
 
         self.command_count = 0
+
+        self.ser = serial.Serial('/dev/cu.PURC_HC05_2', 115200, timeout=1)
 
     def _frightened_timer(self):
         self.loop.call_later(1 / GAME_ENGINE_FREQUENCY, self._frightened_timer)
@@ -62,7 +67,7 @@ class GameEngineClient(ProtoModule):
             "score": msg.score,
             "dt": self.frightened_timer,
             "orientation": self.orientation,
-            "game_state": msg.GameMode,
+            "game_state": msg.mode,
         }
 
     def _update_pellets(self, msg):
@@ -89,32 +94,39 @@ class GameEngineClient(ProtoModule):
 
     BOF -   Beginning of File ( | )
     C   -   Count (command number)
-    GS  -   Game State
+    GS  -   Game State (RUNNING=0, PAUSED=1)
     A   -   Action
     EOF -   End of File ( \n )
 
     """
-    def _encode_command(self, action : int):
-        BOF = b'01111100' # ASCII: |
-        EOF = b'00001010' # ASCII: \n
+    def _encode_command(self, action: int):
+        BOF = bitstring.Bits('0b01111100') # ASCII: |
+        EOF = bitstring.Bits('0b00001010') # ASCII: \n
 
         # get count
-        encoded_count = format(self.command_count, '032b')
+        encoded_count = bitstring.Bits(int=self.command_count, length=32)
+        # format(self.command_count, '032b')
 
         # get game state
-        encoded_game_state = format(self.state['game_state'], '032b')
+        encoded_game_state = bitstring.Bits(int=self.state["game_state"], length=32)
+        # format(self.state['game_state'], '032b')
 
         # get action
         encoded_action = self._encode_action(action)
 
         command_arr = [BOF, encoded_count, encoded_game_state, encoded_action,  EOF]
 
-        command = b''.join(command_arr)
+        command = bitstring.Bits('').join(command_arr).bin
         self.command_count += 1
         return command
 
 
     """
+    UP      ->  WEST
+    LEFT    ->  SOUTH
+    DOWN    ->  EAST
+    RIGHT   ->  NORTH
+
     Action - Face (0) :
     [ 0 D1 D2 X X 0 D1 D2 ] (each is one bit)
 
@@ -124,43 +136,56 @@ class GameEngineClient(ProtoModule):
     X   -   Unused
 
     Action - Move (1) :
-    [ 1 FB FB N0 N1 N2 N3 N4 N5 ] (each is one bit)
+    [ 1 FB N0 N1 N2 N3 N4 N5 ] (each is one bit)
 
     1   -   Move (1)
     FB  -   Forward (0) / Backward (1)
     N   -   Distance to move
     """
-    def _encode_action(self, action : int):
+    def _encode_action(self, action: int):
 
-        action_arr = []
+        ACTION_MAPPING = [
+            bitstring.Bits('0b11000000'), # UP
+            bitstring.Bits('0b11000000'), # LEFT
+            bitstring.Bits('0b11000000'), # DOWN
+            bitstring.Bits('0b11000000'), # RIGHT
+            bitstring.Bits('0b01100011'), # FACE_UP
+            bitstring.Bits('0b00100001'), # FACE_LEFT
+            bitstring.Bits('0b01000010'), # FACE_DOWN
+            bitstring.Bits('0b00000000'), # FACE_RIGHT
+            # bitstring.Bits('0b'), # STAY
+        ]
 
-        # change facing direction
-        if action == :
-            action = b'0'
-            pass
+        # check we are facing the right way before moving
+        if action <= RIGHT and action != self.orientation:
+            # change action to a face action
+            action += 4
+            # TODO: send a movement command
+            # TODO: if facing oposite direction turn that into a backwards motion (use %2)
 
-        # moves the robot
-        elif action == :
-
-            pass
-
-        encoded_action = b''.join(action_arr)
-        return encoded_action
+        return ACTION_MAPPING[action]
+    
+    def _write(self, encoded_cmd):
+        # writes command over bluetooth
+        # TODO: handle bluetooth connection failure
+        self.ser.write(encoded_cmd)
 
     def msg_received(self, msg, msg_type):
         if msg_type == MsgType.LIGHT_STATE:
             self._update_pellets(msg)
+            self.prev_state = self.state
             self.state = self._parse_light(msg)
 
     def tick(self):
         if self.state:
             action = self.policy.get_action(self.state)
+            # TODO: wait for this to be acknowledged first by robot before update
             if FACE_UP <= action < STAY:
                 self.orientation = action - 4
-            # TODO write message here
-            # will probably be the bluetooth code here
+            # send message
             encoded_cmd = self._encode_command(action)
-            self.write(encoded_cmd, )
+            print(encoded_cmd)
+            # self._write(encoded_cmd)
             # possibly use CV position message as an ack
 
 
@@ -168,7 +193,12 @@ def main():
 
     # This module will connect to server and receive the game state
     game_engine_module = GameEngineClient(GAME_ENGINE_ADDRESS, GAME_ENGINE_PORT)
-    game_engine_module.run()
+
+    try:
+        game_engine_module.run()
+    except KeyboardInterrupt:
+        game_engine_module.ser.close()
+
 
 if __name__ == "__main__":
     main()
