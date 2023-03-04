@@ -214,11 +214,18 @@ int main(int argc, char const* argv[])
         {
             if (errno != EWOULDBLOCK && errno != EAGAIN)
             {
-                printf("Receive failed 2\n");
-
-                close(client_sock);
-
-                return -1;
+                if (errno == 104)
+                {
+                    printf("Connection to offboard closed\n");
+                    close(offboard_sock);
+                    offboard_sock = listen_for_offboard(listener_socket);
+                }
+                else
+                {
+                    printf("Receive failed 2\n");
+                    close(client_sock);
+                    return -1;
+                }
             }
         }
         else if (recv_ret == 0)
