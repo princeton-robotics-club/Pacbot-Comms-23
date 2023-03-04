@@ -13,6 +13,7 @@
 
 #define GAME_ENGINE_PORT 11297
 #define OFFBOARD_PORT 11296
+#define GAME_ENGINE_IP "0.0.0.0"
 
 int client_sock;
 int offboard_sock;
@@ -56,7 +57,7 @@ int connect_to_gameEngine(void)
     sa_game_engine.sin_port = htons(GAME_ENGINE_PORT);
     
     // This IP Address is for HARVARD'S GAMEENGINE
-    if (inet_pton(AF_INET, "10.8.9.3", &sa_game_engine.sin_addr)
+    if (inet_pton(AF_INET, GAME_ENGINE_IP, &sa_game_engine.sin_addr)
         <= 0) {
             printf("\nInvalid address/ Address not supported \n");
             return -1;
