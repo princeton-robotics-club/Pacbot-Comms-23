@@ -13,12 +13,12 @@ from Pacbot_High_Level.constants import *
 import pickle
 
 
-GAME_ENGINE_ADDRESS = os.environ.get("BIND_ADDRESS","localhost")
-GAME_ENGINE_PORT = os.environ.get("BIND_PORT", 11297)
-# Use windows IP when connecting to Jack's computer
-# GAME_ENGINE_ADDRESS = os.environ.get("BIND_ADDRESS","10.9.186.78") # Pie
-# GAME_ENGINE_ADDRESS = os.environ.get("BIND_ADDRESS","10.9.75.197")
+# GAME_ENGINE_ADDRESS = os.environ.get("BIND_ADDRESS","localhost")
 # GAME_ENGINE_PORT = os.environ.get("BIND_PORT", 11297)
+# Use windows IP when connecting 
+# GAME_ENGINE_ADDRESS = os.environ.get("BIND_ADDRESS","10.9.186.78") # Pie
+GAME_ENGINE_ADDRESS = os.environ.get("BIND_ADDRESS","192.168.1.73")
+GAME_ENGINE_PORT = os.environ.get("BIND_PORT", 11297)
 GAME_ENGINE_FREQUENCY = 24.0
 
 
