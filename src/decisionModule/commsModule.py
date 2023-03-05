@@ -41,7 +41,7 @@ class GameEngineClient(ProtoModule):
         # checks to override this timer
         self.frightened_timer = 0
         self.ticks_passed = 0
-        self.orientation = UP
+        self.orientation = UP#current orientation which has been confirmed by a message from the robot
 
         self.loop.call_soon(self._frightened_timer)
 
@@ -90,7 +90,7 @@ class GameEngineClient(ProtoModule):
         # TODO: test this
         if pac_pos in self.power_pellets and msg.score == self.last_score + 50:
             self.power_pellets.discard(pac_pos)
-            self.frightened_timer = 40  # TODO: gather all relevant constants
+            self.frightened_timer = 40  # TODO: gather all relevant constants?
 
         # update last_score
         self.last_score = msg.score
@@ -148,30 +148,81 @@ class GameEngineClient(ProtoModule):
 
     1   -   Move (1)
     FB  -   Forward (0) / Backward (1)
-    N   -   Distance to move
+    N   -   Distance to move #this is either 0 or one now
     """
-    def _encode_action(self, action: int):
-
+    def _encode_action(self, action: int, target_direction: int = 0, target_distance: int = 1):#TO DO: get the information regarding distance to move
+        #For the time being. we assume that target_distance is either 0 or 1
         ACTION_MAPPING = [
-            bitstring.Bits('0b10000000'), # UP
-            bitstring.Bits('0b10000000'), # LEFT
-            bitstring.Bits('0b10000000'), # DOWN
-            bitstring.Bits('0b10000000'), # RIGHT
-            bitstring.Bits('0b01100011'), # FACE_UP
-            bitstring.Bits('0b00100001'), # FACE_LEFT
-            bitstring.Bits('0b01000010'), # FACE_DOWN
-            bitstring.Bits('0b00000000'), # FACE_RIGHT
-            # bitstring.Bits('0b'), # STAY
-        ]
+            #Move forward
+            bitstring.Bits('0b10000001'), # UP     
+            bitstring.Bits('0b10000001'), # LEFT    
+            bitstring.Bits('0b10000001'), # DOWN   
+            bitstring.Bits('0b10000001'), # RIGHT    
+
+            #Move backward
+            bitstring.Bits('0b11000001'), # UP       
+            bitstring.Bits('0b11000001'), # LEFT     
+            bitstring.Bits('0b11000001'), # DOWN     
+            bitstring.Bits('0b11000001'), # RIGHT  
+              
+            #turn around
+            bitstring.Bits('0b01100011'), # FACE_UP      
+            bitstring.Bits('0b00100001'), # FACE_LEFT   
+            bitstring.Bits('0b01000010'), # FACE_DOWN   
+            bitstring.Bits('0b00000000'), # FACE_RIGHT  
+            
+            bitstring.Bits('0b10000000'), # STAY go do distance 0
+            
+
+            #go backward
+        ]     
+
+        # UP = 0
+        # LEFT = 1
+        # DOWN = 2
+        # RIGHT = 3
+        # FACE_UP = 4
+        # FACE_LEFT = 5
+        # FACE_DOWN = 6
+        # FACE_RIGHT = 7
+        # STAY = 8
+
+
+        # MOVE_TICKS = 6
+        # TURN_TICKS = 36
 
         # check we are facing the right way before moving
-        if action <= RIGHT and action != self.orientation:
-            # change action to a face action
-            action += 4
-            # TODO: send a movement command
-            # TODO: if facing oposite direction turn that into a backwards motion (use %2)
+        move_backward_next = False
+        action_num = 0
+        if  action != MOVE_TICKS and action != TURN_TICKS:
+            if action == STAY:
+                action_num = 12
+            else:
+                target_direction = action%4
+                if (action <= 3):#move
+                    assert ( target_direction == self.orientation)
+                    #we assume that if (action <= 3), target_direction == self.orientation always hold
+                    action_num = target_direction
+                elif target_direction == self.orientation:#turn around ?-> no need to do that
+                    action_num = 12
+                elif target_direction%2 == self.orientation%2:# turn around ? -> avoid it by going backward
 
-        return ACTION_MAPPING[action]
+                    # else:
+                    action_num = 12
+                    move_backward_next = True
+                else:#we need to face first, we discard the information of position??
+                    action_num = target_direction
+                
+        
+        # if action <= RIGHT and action != self.orientation:
+        #     # change action to a face action
+        #     action += 4
+        #     # TODO: send a movement command to robot
+            
+            
+        #     # TODO: if facing oposite direction turn that into a backwards motion (use %2)
+
+        return ACTION_MAPPING[action_num]
     
     def _increment_count(self):
         # we want to avoid sending \n to robot
