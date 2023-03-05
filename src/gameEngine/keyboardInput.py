@@ -6,7 +6,7 @@ from messages import *
 from pacbot.variables import *
 from pacbot.grid import *
 
-ADDRESS = os.environ.get("BIND_ADDRESS","localhost")    # address of game engine server
+ADDRESS = os.environ.get("BIND_ADDRESS","10.9.166.80")    # address of game engine server
 PORT = os.environ.get("BIND_PORT", 11297)               # port game engine server is listening on
 
 SPEED = 1.0

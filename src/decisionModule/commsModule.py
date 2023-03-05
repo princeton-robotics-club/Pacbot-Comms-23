@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os
+import time
 import bitstring
 import numpy as np
 from robomodules import ProtoModule
@@ -17,9 +18,11 @@ import pickle
 # GAME_ENGINE_PORT = os.environ.get("BIND_PORT", 11297)
 # Use windows IP when connecting 
 # GAME_ENGINE_ADDRESS = os.environ.get("BIND_ADDRESS","10.9.186.78") # Pie
-GAME_ENGINE_ADDRESS = os.environ.get("BIND_ADDRESS","192.168.1.73")
-GAME_ENGINE_PORT = os.environ.get("BIND_PORT", 11297)
-GAME_ENGINE_FREQUENCY = 24.0
+GAME_ENGINE_ADDRESS = os.environ.get("BIND_ADDRESS","10.9.140.100")
+GAME_ENGINE_PORT = os.environ.get("BIND_PORT", 11296)
+# GAME_ENGINE_FREQUENCY = 24.0
+GAME_ENGINE_FREQUENCY = 48.0
+BLUETOOTH_MODULE_NAME = '/dev/cu.PURC_HC05_9'
 
 
 class GameEngineClient(ProtoModule):
@@ -44,9 +47,11 @@ class GameEngineClient(ProtoModule):
 
         self.last_score = 0
 
-        self.command_count = 0
+        self.command_count = 1
 
-        self.ser = serial.Serial('/dev/cu.PURC_HC05_2', 115200, timeout=1)
+        self.prev_pos = (14, 7) #starting coordinates
+
+        self.ser = serial.Serial(BLUETOOTH_MODULE_NAME, 115200, timeout=1)
 
     def _frightened_timer(self):
         self.loop.call_later(1 / GAME_ENGINE_FREQUENCY, self._frightened_timer)
@@ -55,7 +60,6 @@ class GameEngineClient(ProtoModule):
             self.frightened_timer -= 1
 
     def _parse_light(self, msg: LightState):
-
         # convert light state into dict
         return {
             "pellets": self.pellets,
@@ -113,7 +117,7 @@ class GameEngineClient(ProtoModule):
         # format(self.command_count, '032b')
 
         # get game state
-        encoded_game_state = bitstring.Bits(int=self.state["game_state"], length=32)
+        encoded_game_state = bitstring.Bits(int=self.state["game_state"], length=8)
         # format(self.state['game_state'], '032b')
 
         # get action
@@ -122,7 +126,6 @@ class GameEngineClient(ProtoModule):
         command_arr = [BOF, encoded_count, encoded_game_state, encoded_action,  EOF]
 
         command = bitstring.Bits('').join(command_arr).bytes # needs to be written as bytes
-        self.command_count += 1
         return command
 
 
@@ -150,10 +153,10 @@ class GameEngineClient(ProtoModule):
     def _encode_action(self, action: int):
 
         ACTION_MAPPING = [
-            bitstring.Bits('0b11000000'), # UP
-            bitstring.Bits('0b11000000'), # LEFT
-            bitstring.Bits('0b11000000'), # DOWN
-            bitstring.Bits('0b11000000'), # RIGHT
+            bitstring.Bits('0b10000000'), # UP
+            bitstring.Bits('0b10000000'), # LEFT
+            bitstring.Bits('0b10000000'), # DOWN
+            bitstring.Bits('0b10000000'), # RIGHT
             bitstring.Bits('0b01100011'), # FACE_UP
             bitstring.Bits('0b00100001'), # FACE_LEFT
             bitstring.Bits('0b01000010'), # FACE_DOWN
@@ -170,10 +173,73 @@ class GameEngineClient(ProtoModule):
 
         return ACTION_MAPPING[action]
     
+    def _increment_count(self):
+        # we want to avoid sending \n to robot
+        self.command_count+= 1
+        count_in_16 =  np.base_repr(self.command_count,16)
+        def avoid_A(count_in_16): # A corresponds to '\n'
+            dict = {'0':'0','1':'1','2':'2','3':'3','4':'4','5':'5','6':'6','7':'7','8':'8','9':'9','A':'b','B':'b','C':'c','D':'d','E':'e','F':'f'}
+            count_in_16 = [dict[i] for i in count_in_16]
+            return "".join(count_in_16)
+        count_in_16_withoutA = avoid_A(count_in_16)
+        self.command_count = int(count_in_16_withoutA,16)
+ 
     def _write(self, encoded_cmd):
         # writes command over bluetooth
         # TODO: handle bluetooth connection failure
+        print("sent command: " + str(encoded_cmd))
         self.ser.write(encoded_cmd)
+
+        
+    def _read(self):
+        # writes command over bluetooth
+        # TODO: handle bluetooth connection failure
+        msg = self.ser.read_until(expected=b'\n') # size is number of bytes
+        self.ser.reset_input_buffer()
+        print("received ack: " + str(msg))
+
+        if len(msg) != 7:
+            msg = self.ser.read_until(expected=b'\n')
+
+        if len(msg) != 7:
+            print("error: dropped byte(s)!")
+            print("bad message received: " + str(msg))
+            return (-1, False)
+        
+        if msg[6:7] != b'\n':
+            print(str(msg[6:7]))
+            print("error: eof missing")
+            return (-1, False)
+        if msg[0:1] != b'|':
+            print(str(msg[0:1]))
+            print("error: bof missing")
+            return (-1, False)
+        
+        count = int.from_bytes(msg[1:5], "big")
+        ack = True #msg[5:6] == b'\x01'
+        # if not ack:
+        #     print(msg[5:6])
+        return (count, ack)
+    
+    def _read_ack(self, action):
+        # read ack from robot (rotation ack)
+        (count, ack) = self._read()
+        print(count, ack)
+        print("self.command_count: " + str(self.command_count))
+        if self.command_count == count and ack == True:
+            # update orientation
+            if FACE_UP <= action < STAY:
+                self.orientation = action - 4
+            # move on to next command
+            self._increment_count()
+
+        
+        # read ack from game engine (movement ack)
+        if self.state["pac"][0] != self.prev_pos[0] and self.state["pac"][1] != self.prev_pos[1]:
+            self.prev_pos = (self.state["pac"][0], self.state["pac"][1])
+            self._increment_count()
+            return
+
 
 
     def msg_received(self, msg, msg_type):
@@ -186,15 +252,13 @@ class GameEngineClient(ProtoModule):
         if self.state:
             action = self.policy.get_action(self.state)
             # TODO: wait for this to be acknowledged first by robot before update
-            if FACE_UP <= action < STAY:
-                self.orientation = action - 4
+
             # send message
             encoded_cmd = self._encode_command(action)
-            print(self.state)
-            print(action)
-            print(encoded_cmd)
             self._write(encoded_cmd)
-            # possibly use CV position message as an ack
+
+            # read acknowledgement message
+            self._read_ack(action)
 
 
 def main():
