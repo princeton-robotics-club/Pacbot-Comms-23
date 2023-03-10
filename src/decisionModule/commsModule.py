@@ -18,8 +18,8 @@ import pickle
 # GAME_ENGINE_PORT = os.environ.get("BIND_PORT", 11297)
 # Use windows IP when connecting 
 # GAME_ENGINE_ADDRESS = os.environ.get("BIND_ADDRESS","10.9.186.78") # Pie
-GAME_ENGINE_ADDRESS = os.environ.get("BIND_ADDRESS","10.9.140.100")
-GAME_ENGINE_PORT = os.environ.get("BIND_PORT", 11296)
+GAME_ENGINE_ADDRESS = os.environ.get("BIND_ADDRESS","192.168.1.73")
+GAME_ENGINE_PORT = os.environ.get("BIND_PORT", 11297)
 # GAME_ENGINE_FREQUENCY = 24.0
 GAME_ENGINE_FREQUENCY = 48.0
 BLUETOOTH_MODULE_NAME = '/dev/cu.PURC_HC05_9'
@@ -51,7 +51,7 @@ class GameEngineClient(ProtoModule):
 
         self.prev_pos = (14, 7) #starting coordinates
 
-        self.ser = serial.Serial(BLUETOOTH_MODULE_NAME, 115200, timeout=1)
+        # self.ser = serial.Serial(BLUETOOTH_MODULE_NAME, 115200, timeout=1)
 
     def _frightened_timer(self):
         self.loop.call_later(1 / GAME_ENGINE_FREQUENCY, self._frightened_timer)
@@ -306,10 +306,11 @@ class GameEngineClient(ProtoModule):
 
             # send message
             encoded_cmd = self._encode_command(action)
-            self._write(encoded_cmd)
+            print(encoded_cmd)
+            # self._write(encoded_cmd)
 
             # read acknowledgement message
-            self._read_ack(action)
+            # self._read_ack(action)
 
 
 def main():
