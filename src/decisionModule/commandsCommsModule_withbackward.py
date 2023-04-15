@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-
 import os
 import time
 import bitstring
@@ -13,6 +12,22 @@ from Pacbot_High_Level.rl.variables import o, O
 from Pacbot_High_Level.constants import *
 import pickle
 import sys
+from messages import *
+
+# Direction enums
+right = 0
+left = 1
+up = 2
+down = 3
+# Grid enums
+# o = normal pellet, e = empty space, O = power pellet, c = cherry position
+# I = wall, n = ghost chambers
+I = 1
+o = 2
+e = 3
+O = 4
+n = 5
+c = 6
 
 
 # GAME_ENGINE_ADDRESS = os.environ.get("BIND_ADDRESS","localhost")
@@ -23,12 +38,14 @@ GAME_ENGINE_ADDRESS = os.environ.get("BIND_ADDRESS","10.9.245.61")
 GAME_ENGINE_PORT = os.environ.get("BIND_PORT", 11297)
 
 HARVARD_ENGINE_FREQUENCY = 24.0
-GAME_ENGINE_FREQUENCY = 48.0
+# GAME_ENGINE_FREQUENCY = 48.0
+GAME_ENGINE_FREQUENCY = 2.0
+
 BLUETOOTH_MODULE_NAME = '/dev/cu.PURC_HC05_9'
 
 
 class GameEngineClient(ProtoModule):
-    def __init__(self, addr, port):
+    def __init__(self, addr, port, disable_bluetooth=False):
         self.subscriptions = [MsgType.LIGHT_STATE]
         print("connecting to server.py...")
         super().__init__(addr, port, message_buffers, MsgType, GAME_ENGINE_FREQUENCY, self.subscriptions)
@@ -60,9 +77,21 @@ class GameEngineClient(ProtoModule):
 
         self.life_count = 3
 
-        print("connecting to bluetooth...")
-        self.ser = serial.Serial(BLUETOOTH_MODULE_NAME, 115200, timeout=1)
-        print("connected!")
+
+
+        self.disable_bluetooth = disable_bluetooth
+        if not disable_bluetooth:
+            print("connecting to bluetooth...")
+            self.ser = serial.Serial(BLUETOOTH_MODULE_NAME, 115200, timeout=1)
+            print("connected!")
+
+
+
+        # funky things
+        self.cur_dir = left
+        self.next_dir = left
+        self.pacbot_starting_pos = [14, 7]
+        self.pacbot_pos = [self.pacbot_starting_pos[0], self.pacbot_starting_pos[1]]
 
     def _frightened_timer(self):
         self.loop.call_later(1 / HARVARD_ENGINE_FREQUENCY, self._frightened_timer)
@@ -154,12 +183,12 @@ class GameEngineClient(ProtoModule):
         # format(self.state['game_state'], '032b')
 
         # get action
-        encoded_action = self._encode_action(action)
+        encoded_action,orientation = self._encode_action(action)
 
         command_arr = [BOF, encoded_count, encoded_game_state, encoded_action,  EOF]
 
         command = bitstring.Bits('').join(command_arr).bytes # needs to be written as bytes
-        return command
+        return command,orientation
 
 
     """
@@ -168,15 +197,15 @@ class GameEngineClient(ProtoModule):
     DOWN    ->  EAST
     RIGHT   ->  NORTH
 
-    Action - Face (0) :
-    [ 0 D1 D2 X X 0 D1 D2 ] (each is one bit)
+    Action - Face (0) : Go Forward
+    [ FB D1 D2 X X 0 D1 D2 ] (each is one bit)
 
-    F   -   Face (0)
+    FB   -   Forward (0) Backward(1)
     D1  -   Direction 1 (N=00, S=01, E=10, W=11)
     D2  -   Direction 2 (N=00, S=01, E=10, W=11)
     X   -   Unused
 
-    Action - Move (1) :
+    Action - Move (1) : Go 
     [ 1 FB N0 N1 N2 N3 N4 N5 ] (each is one bit)
 
     1   -   Move (1)
@@ -186,29 +215,31 @@ class GameEngineClient(ProtoModule):
     def _encode_action(self, action: int, target_direction: int = 0, target_distance: int = 1):#TO DO: get the information regarding distance to move
         #For the time being. we assume that target_distance is either 0 or 1
         ACTION_MAPPING = [
-            #Move forward
-            bitstring.Bits('0b10000001'), # UP     
-            bitstring.Bits('0b10000001'), # LEFT    
-            bitstring.Bits('0b10000001'), # DOWN   
-            bitstring.Bits('0b10000001'), # RIGHT    
-
-            # #Move backward
-            # bitstring.Bits('0b11000001'), # UP       
-            # bitstring.Bits('0b11000001'), # LEFT     
-            # bitstring.Bits('0b11000001'), # DOWN     
-            # bitstring.Bits('0b11000001'), # RIGHT  
-
-
+            # Move forward
             bitstring.Bits('0b01100011'), # FACE_UP    (west)  
             bitstring.Bits('0b01000010'), # FACE_LEFT  (south)
             bitstring.Bits('0b00100001'), # FACE_DOWN  (east)
             bitstring.Bits('0b00000000'), # FACE_RIGHT (north)
+            
+            bitstring.Bits('0b10000001'), # UP     #dummy 
+            bitstring.Bits('0b10000001'), # LEFT    
+            bitstring.Bits('0b10000001'), # DOWN   
+            bitstring.Bits('0b10000001'), # RIGHT    
 
+            bitstring.Bits('0b10000000'), # STAY go do distance 0
+            bitstring.Bits('0b10000000'), # STAY go do distance 0 #dummy command for the sake of modular
+            bitstring.Bits('0b10000000'), # STAY go do distance 0
             bitstring.Bits('0b10000000'), # STAY go do distance 0
             
 
             #go backward
-            bitstring.Bits('0b11000001'), # back  
+            #bitstring.Bits('0b11000001'), # back  
+            # move backward
+            bitstring.Bits('0b10100001'), # FACE_DOWN  (east)  and go backward
+            bitstring.Bits('0b10000000'), # FACE_RIGHT (north) and go backward
+            bitstring.Bits('0b11100011'), # FACE_UP    (west)  and go backward
+            bitstring.Bits('0b11000010'), # FACE_LEFT  (south) and go backward
+
         ]      
 
         ACTION_MAPPING_NAMES = [
@@ -218,18 +249,20 @@ class GameEngineClient(ProtoModule):
             "GO EAST",
             "GO NORTH",
             # turn
-            "FACE WEST",
+            "FACE WEST",#dummy
             "FACE SOUTH",
             "FACE EAST",
             "FACE NORTH",
             # stay  
             "STAY",
+            "STAY",
+            "STAY",
+            "STAY",
             # go backward
-            "GO BACK",
-        ]   
-
-        ACTION_MAPPING_COMMANDS = [
-            "a","s","d","w",
+            "GO BACK FACING EAST",
+            "GO BACK FACING NORTH",
+            "GO BACK FACING WEST",
+            "GO BACK FACING SOUTH",
         ]   
 
         # UP = 0
@@ -241,57 +274,51 @@ class GameEngineClient(ProtoModule):
         # FACE_DOWN = 6
         # FACE_RIGHT = 7
         # STAY = 8
-
-
         # MOVE_TICKS = 6
         # TURN_TICKS = 36
 
-        # check we are facing the right way before moving
-        # move_backward_next = False
-        # action_num = 0
-        # if  action != MOVE_TICKS and action != TURN_TICKS:
-        #     if action == STAY:
-        #         action_num = 12
-        #     else:
-        #         target_direction = action%4
-        #         if (action <= 3):#move
-        #             assert ( target_direction == self.orientation)
-        #             #we assume that if (action <= 3), target_direction == self.orientation always hold
-        #             action_num = target_direction
-        #         elif target_direction == self.orientation:#turn around ?-> no need to do that
-        #             action_num = 12
-        #         elif target_direction%2 == self.orientation%2:# turn around ? -> avoid it by going backward
+        orientation = action%4
 
-        #             # else:
-        #             action_num = 12
-        #             move_backward_next = True
-        #         else:#we need to face first, we discard the information of position??
-        #             action_num = target_direction
-                
+        #forward or backward
+        inverse_orientation_map = {0:2,1:3,2:0,3:1}
+        #assume that 0<=action <4
+        if action <4 and self.orientation == inverse_orientation_map[action %4]: 
+            action += 12
+            orientation = self.orientation
+
+
+        # if self.old_count != self.command_count:
+            # self.old_count = self.command_count
+        print('-' * 15)
+        print("command action: " + ACTION_MAPPING_NAMES[action])
+        print("command action: " + str(bin(int(str(ACTION_MAPPING[action]),16))))
+        print("facing: " + ACTION_MAPPING_NAMES[self.orientation + 4])
+        print("command count: " + str(self.command_count))
+
+        ACTION_MAPPING_COMMANDS = [
+            left, down, right, up
+        ]
+        if action == STAY:
+            self.next_dir = -1
+            return
         
-        # if action <= RIGHT and action != self.orientation:
-        #     # change action to a face action
-        #     action += 4
-        #     # TODO: send a movement command to robot
+        self.next_dir = ACTION_MAPPING_COMMANDS[orientation]#not checked whether it 
+
+        if self.state["game_state"] != 1:
+            if not self._move_if_valid_dir(self.next_dir, self.state["pac"][0], self.state["pac"][1]):
+                self._move_if_valid_dir(self.cur_dir, self.state["pac"][0], self.state["pac"][1])
+        else:
+            # reset pacbot position
+            self.pacbot_pos = [self.pacbot_starting_pos[0], self.pacbot_starting_pos[1]]
+
+        pos_buf = PacmanState.AgentState()
+        pos_buf.x = self.pacbot_pos[0]
+        pos_buf.y = self.pacbot_pos[1]
+        pos_buf.direction = self.cur_dir
+        self.write(pos_buf.SerializeToString(), MsgType.PACMAN_LOCATION)
+    
             
-        
-        #     # TODO: if facing oposite direction turn that into a backwards motion (use %2)
-
-
-        # TODO: remove this code when backwards is working
-        # if action < 4 and self.orientation != action:
-        #     action += 4
-
-        if self.old_count != self.command_count:
-            self.old_count = self.command_count
-            print('-' * 15)
-            print("command action: " + ACTION_MAPPING_NAMES[action])
-            print("command action: " + str(bin(int(str(ACTION_MAPPING[action]),16))))
-            print("facing: " + ACTION_MAPPING_NAMES[self.orientation + 4])
-            print("command count: " + str(self.command_count))
-       
-            
-        return ACTION_MAPPING[action]
+        return ACTION_MAPPING[action],orientation
     
     def _increment_count(self):
         # we want to avoid sending \n to robot
@@ -338,7 +365,7 @@ class GameEngineClient(ProtoModule):
         ack = True
         return (count, ack)
     
-    def _read_ack(self, action):
+    def _read_ack(self, action,orientation):
         # read ack from robot (rotation ack)
         (count, ack) = self._read()
         # print("command sent: " + str(self.command_count))
@@ -351,7 +378,7 @@ class GameEngineClient(ProtoModule):
         if self.command_count == count and ack == True:
             # update orientation
             if FACE_UP <= action < STAY:
-                self.orientation = action - 4
+                self.orientation = orientation
             # move on to next command
             self._increment_count()
 
@@ -361,6 +388,26 @@ class GameEngineClient(ProtoModule):
             self.prev_pos = (self.state["pac"][0], self.state["pac"][1])
             self._increment_count()
             return
+        
+    
+    def _move_if_valid_dir(self, direction, x, y):
+        if direction == right and grid[x + 1][y] not in [I, n]:
+            self.pacbot_pos[0] += 1
+            self.cur_dir = direction
+            return True
+        elif direction == left and grid[x - 1][y] not in [I, n]:
+            self.pacbot_pos[0] -= 1
+            self.cur_dir = direction
+            return True
+        elif direction == up and grid[x][y + 1] not in [I, n]:
+            self.pacbot_pos[1] += 1
+            self.cur_dir = direction
+            return True
+        elif direction == down and grid[x][y - 1] not in [I, n]:
+            self.pacbot_pos[1] -= 1
+            self.cur_dir = direction
+            return True
+        return False
 
 
     def msg_received(self, msg, msg_type):
@@ -377,27 +424,29 @@ class GameEngineClient(ProtoModule):
             # TODO: wait for this to be acknowledged first by robot before update
 
             # TODO: Remove this temporary conversion from turning to actions. Put it somewhere better
-            if action < FACE_UP:
-                action += 4
+            if FACE_UP <= action < STAY:#what does it do now?
+                action -= 4
 
             # stop when game is paused
             # if self.state["game_state"] == 1:
             #     action = 8
 
 
-            ACTION_MAPPING_COMMANDS = [
-                "a","s","d","w",
-            ]   
+             
 
 
             # if action > 3 and action <= 7:
             #     print(ACTION_MAPPING_COMMANDS[action - 4], end="\n")
 
+            # if not 
             # send message
-            encoded_cmd = self._encode_command(action)
+            encoded_cmd, orientation = self._encode_command(action)
             self._write(encoded_cmd)
             # read acknowledgement message
-            self._read_ack(action)
+            self._read_ack(action, orientation)
+
+            
+
 
 
 def main():

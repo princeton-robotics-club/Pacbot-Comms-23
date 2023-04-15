@@ -6,7 +6,7 @@ import sys, os, time
 import robomodules as rm
 from messages import *
 
-ADDRESS = os.environ.get("BIND_ADDRESS","localhost")
+ADDRESS = os.environ.get("BIND_ADDRESS","10.9.245.61")
 PORT = os.environ.get("BIND_PORT", 11297)
 
 FREQUENCY = 10
@@ -39,6 +39,7 @@ class TerminalPrinter(rm.ProtoModule):
         self._clear_rows(100)
         mode = self._parse_game_mode(state.mode)
         print("Pacman  Score: " + str(state.score) + "  State: " + str(mode) + "  Lives: " + str(state.lives))
+        print("")
         displayBuf = []
         row_index = 0
         col_index = 0

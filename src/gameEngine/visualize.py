@@ -5,7 +5,7 @@ from graphics import Visualizer
 from graphics.variables import Split
 from graphics.variables import TOP_SQUARE_SIZE, BOTTOM_SQUARE_SIZE, SQUARE_SIZE
 
-ADDRESS = os.environ.get("BIND_ADDRESS","10.9.166.80")
+ADDRESS = os.environ.get("BIND_ADDRESS","10.9.245.61")
 PORT = os.environ.get("BIND_PORT", 11297)
 
 def main():

@@ -6,7 +6,7 @@ from messages import *
 from pacbot.variables import game_frequency, ticks_per_update
 from pacbot import StateConverter, GameState
 
-ADDRESS = os.environ.get("BIND_ADDRESS","10.9.166.80") # the address of the game engine server
+ADDRESS = os.environ.get("BIND_ADDRESS","10.9.245.61") # the address of the game engine server
 PORT = os.environ.get("BIND_PORT", 11297)            # the port the game engine server is listening to
 
 FREQUENCY = game_frequency * ticks_per_update
@@ -24,6 +24,7 @@ class GameEngine(rm.ProtoModule):
         self.write(full_state.SerializeToString(), MsgType.FULL_STATE)
 
         light_state = StateConverter.convert_game_state_to_light(self.game)
+        print(light_state)
         self.write(light_state.SerializeToString(), MsgType.LIGHT_STATE)
 
     def msg_received(self, msg, msg_type):

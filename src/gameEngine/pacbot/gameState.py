@@ -223,21 +223,21 @@ class GameState:
         if self._should_die():
             self._die()
         else:
-            self._check_if_ghosts_eaten()
-            if self.update_ticks % ticks_per_update == 0:
-                self._update_ghosts()
-                self._check_if_ghosts_eaten()
-                if self.state == frightened:
-                    if self.frightened_counter == 1:
-                        self._end_frightened()
-                    elif self.frightened_counter == frightened_length:
-                        self.just_swapped_state = False
-                    self.frightened_counter -= 1
-                else:
-                    self._swap_state_if_necessary()
-                    self.state_counter += 1
-                self.start_counter += 1
-                # self.print_ghost_pos()
+            # self._check_if_ghosts_eaten()
+            # if self.update_ticks % ticks_per_update == 0:
+            #     self._update_ghosts()
+            #     self._check_if_ghosts_eaten()
+            #     if self.state == frightened:
+            #         if self.frightened_counter == 1:
+            #             self._end_frightened()
+            #         elif self.frightened_counter == frightened_length:
+            #             self.just_swapped_state = False
+            #         self.frightened_counter -= 1
+            #     else:
+            #         self._swap_state_if_necessary()
+            #         self.state_counter += 1
+            #     self.start_counter += 1
+            #     # self.print_ghost_pos()
             self._update_score()
             if self._should_spawn_cherry():
                 self._spawn_cherry()
