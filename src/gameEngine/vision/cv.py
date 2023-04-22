@@ -93,6 +93,8 @@ class MovementProcessor(rm.ProtoModule):
 
                 if grid[b_x][b_y] == I:
                     skip = True
+                
+                cv2.rectangle(warped, (x, y), (x + w, y + h), (255,0,0), 4)
                 print((b_x, b_y))
                 if not skip:
                     buf = PacmanState.AgentState()

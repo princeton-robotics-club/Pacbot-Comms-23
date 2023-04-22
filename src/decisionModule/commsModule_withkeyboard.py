@@ -20,7 +20,7 @@ import grid
 # Use windows IP when connecting 
 # GAME_ENGINE_ADDRESS = os.environ.get("BIND_ADDRESS","10.9.186.78") # Pie
 # GAME_ENGINE_ADDRESS = os.environ.get("BIND_ADDRESS","10.9.140.100")
-GAME_ENGINE_ADDRESS = os.environ.get("BIND_ADDRESS","localhost")
+GAME_ENGINE_ADDRESS = os.environ.get("BIND_ADDRESS","10.9.28.246")
 GAME_ENGINE_PORT = os.environ.get("BIND_PORT", 11297)
 # GAME_ENGINE_FREQUENCY = 24.0
 GAME_ENGINE_FREQUENCY = 100.0
@@ -35,6 +35,11 @@ FACE_LEFT = 5
 FACE_DOWN = 6
 FACE_RIGHT = 7
 STAY = 8
+
+BACK_UP = 9
+BACK_LEFT = 10
+BACK_DOWN = 11
+BACK_RIGHT = 12
 
 
 MOVE_TICKS = 6
@@ -185,19 +190,23 @@ class GameEngineClient(ProtoModule):
             bitstring.Bits('0b10000001'), # DOWN   
             bitstring.Bits('0b10000001'), # RIGHT    
 
-            # #Move backward
-            # bitstring.Bits('0b11000001'), # UP       
-            # bitstring.Bits('0b11000001'), # LEFT     
-            # bitstring.Bits('0b11000001'), # DOWN     
-            # bitstring.Bits('0b11000001'), # RIGHT  
               
             #turn around
             bitstring.Bits('0b00000000'), # FACE_UP      
             bitstring.Bits('0b00100001'), # FACE_LEFT   
             bitstring.Bits('0b01000010'), # FACE_DOWN   
-            bitstring.Bits('0b01100011'), # FACE_RIGHT  
+            bitstring.Bits('0b01100011'), # FACE_RIGHT 
+
             
-            bitstring.Bits('0b10000000'), # STAY go do distance 0
+            bitstring.Bits('0b10000000'), # STAY go do distance 0 
+
+            
+            # #Move backward
+            bitstring.Bits('0b10000000'), # BACK_UP       
+            bitstring.Bits('0b10100001'), # BACK_LEFT     
+            bitstring.Bits('0b11000010'), # BACK_DOWN     
+            bitstring.Bits('0b11100011'), # BACK_RIGHT  
+            
             
 
             #go backward
@@ -340,6 +349,14 @@ class GameEngineClient(ProtoModule):
             return FACE_UP
         elif char == 's':
             return FACE_DOWN
+        elif char == 'j':
+            return BACK_RIGHT
+        elif char == 'l':
+            return BACK_LEFT
+        elif char == 'k':
+            return BACK_UP
+        elif char == 'i':
+            return BACK_DOWN
         elif char == ' ':
             return UP
         elif char == 'b':

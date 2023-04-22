@@ -34,12 +34,12 @@ c = 6
 # GAME_ENGINE_PORT = os.environ.get("BIND_PORT", 11297)
 # Use windows IP when connecting 
 # GAME_ENGINE_ADDRESS = os.environ.get("BIND_ADDRESS","10.9.186.78") # Pie
-GAME_ENGINE_ADDRESS = os.environ.get("BIND_ADDRESS","10.9.245.61")
+GAME_ENGINE_ADDRESS = os.environ.get("BIND_ADDRESS","10.9.28.246")
 GAME_ENGINE_PORT = os.environ.get("BIND_PORT", 11297)
 
 HARVARD_ENGINE_FREQUENCY = 24.0
 # GAME_ENGINE_FREQUENCY = 48.0
-GAME_ENGINE_FREQUENCY = 2.0
+GAME_ENGINE_FREQUENCY = 2.0*8
 
 BLUETOOTH_MODULE_NAME = '/dev/cu.PURC_HC05_9'
 
@@ -240,6 +240,8 @@ class GameEngineClient(ProtoModule):
             bitstring.Bits('0b11100011'), # FACE_UP    (west)  and go backward
             bitstring.Bits('0b11000010'), # FACE_LEFT  (south) and go backward
 
+
+
         ]      
 
         ACTION_MAPPING_NAMES = [
@@ -311,11 +313,12 @@ class GameEngineClient(ProtoModule):
             # reset pacbot position
             self.pacbot_pos = [self.pacbot_starting_pos[0], self.pacbot_starting_pos[1]]
 
+
         pos_buf = PacmanState.AgentState()
         pos_buf.x = self.pacbot_pos[0]
         pos_buf.y = self.pacbot_pos[1]
         pos_buf.direction = self.cur_dir
-        self.write(pos_buf.SerializeToString(), MsgType.PACMAN_LOCATION)
+        # self.write(pos_buf.SerializeToString(), MsgType.PACMAN_LOCATION)
     
             
         return ACTION_MAPPING[action],orientation
@@ -419,7 +422,7 @@ class GameEngineClient(ProtoModule):
     def tick(self):
         if self.state:
             # action = self.last_action
-            action = self.policy.get_action(self.state)
+            action, _ = self.policy.get_action(self.state)
 
             # TODO: wait for this to be acknowledged first by robot before update
 

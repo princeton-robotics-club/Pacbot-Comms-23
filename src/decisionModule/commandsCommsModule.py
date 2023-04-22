@@ -35,12 +35,12 @@ c = 6
 # GAME_ENGINE_PORT = os.environ.get("BIND_PORT", 11297)
 # Use windows IP when connecting 
 # GAME_ENGINE_ADDRESS = os.environ.get("BIND_ADDRESS","10.9.186.78") # Pie
-GAME_ENGINE_ADDRESS = os.environ.get("BIND_ADDRESS","10.9.245.61")
+GAME_ENGINE_ADDRESS = os.environ.get("BIND_ADDRESS","10.9.28.246")
 GAME_ENGINE_PORT = os.environ.get("BIND_PORT", 11297)
 
 HARVARD_ENGINE_FREQUENCY = 24.0
 # GAME_ENGINE_FREQUENCY = 48.0
-GAME_ENGINE_FREQUENCY = 2.0
+GAME_ENGINE_FREQUENCY = 2.0*2
 
 BLUETOOTH_MODULE_NAME = '/dev/cu.PURC_HC05_9'
 
@@ -260,10 +260,16 @@ class GameEngineClient(ProtoModule):
             # bitstring.Bits('0b11000001'), # DOWN     
             # bitstring.Bits('0b11000001'), # RIGHT  
             # move backward
-            bitstring.Bits('0b11100011'), # FACE_UP    (west)  
-            bitstring.Bits('0b11000010'), # FACE_LEFT  (south)
-            bitstring.Bits('0b10100001'), # FACE_DOWN  (east)
-            bitstring.Bits('0b10000000'), # FACE_RIGHT (north)
+            # bitstring.Bits('0b11100011'), # FACE_UP    (west)  
+            # bitstring.Bits('0b11000010'), # FACE_LEFT  (south)
+            # bitstring.Bits('0b10100001'), # FACE_DOWN  (east)
+            # bitstring.Bits('0b10000000'), # FACE_RIGHT (north)
+            
+            # #Move backward
+            bitstring.Bits('0b10000000'), # BACK_UP       
+            bitstring.Bits('0b10100001'), # BACK_LEFT     
+            bitstring.Bits('0b11000010'), # BACK_DOWN     
+            bitstring.Bits('0b11100011'), # BACK_RIGHT  
         ]      
 
         ACTION_MAPPING_NAMES = [
@@ -441,7 +447,7 @@ class GameEngineClient(ProtoModule):
     def tick(self):
         if self.state:
             # action = self.last_action
-            action = self.policy.get_action(self.state)
+            action, _ = self.policy.get_action(self.state)
 
             # TODO: wait for this to be acknowledged first by robot before update
 

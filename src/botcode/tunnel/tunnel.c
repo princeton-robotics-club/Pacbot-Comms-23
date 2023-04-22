@@ -100,11 +100,12 @@ int connect_to_gameEngine(void)
         int error;
         int len = sizeof(error);
         // Portability issues here if using solaris and not berkeley!
-        getsockopt(client_sock, SOL_SOCKET, SO_ERROR, &error, &len);
+        getsockopt(client_sock, SOL_SOCKET, SO_ERROR, &error, (socklen_t *) &len);
         if (error != 0)
         {
             printf("\nConnection Failed to game engine, is server.py running? %d\n", error);
-            exit(-1);
+            close(client_sock);
+            return -1;
         }
     }
     printf("Connection made to GameEngine\n\n");
