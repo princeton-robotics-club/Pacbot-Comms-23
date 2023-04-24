@@ -73,6 +73,10 @@ def warp_image(frame):
     
     # Find contours
     contours, _ = cv2.findContours(imgray, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+
+    # show grayed image
+    cv2.imshow('grayed1', imgray)
+    # cv2.waitKey()
     
     # At this point we will filter our contours.
     # We will merge contours that are nearby together
@@ -80,7 +84,7 @@ def warp_image(frame):
     rects = []
     for c in contours:
         rect = cv2.boundingRect(c)
-        if rect[2]*rect[3] > 30:
+        if rect[2]*rect[3] > 200:
             rects.append(rect)
     if len(rects) < 4:
         return []

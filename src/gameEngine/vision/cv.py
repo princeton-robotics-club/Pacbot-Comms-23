@@ -65,7 +65,8 @@ class MovementProcessor(rm.ProtoModule):
 
         if len(contours) != 0:
             c = max(contours, key = cv2.contourArea)
-            if cv2.contourArea(c) > 100:
+            if cv2.contourArea(c) > 500:
+                # print(cv2.contourArea(c))
                 skip = False
                 x, y, w, h = cv2.boundingRect(c)
                 x_c = x + 0.5*sector_w

@@ -170,9 +170,9 @@ class GameEngineClient(ProtoModule):
     EOF -   End of File ( \n )
 
     """
-    def _encode_command(self, action: int):
-        BOF = bitstring.Bits('0b01111100') # ASCII: |
-        EOF = bitstring.Bits('0b00001010') # ASCII: \n
+    def _encode_command(self, action: int, distance : int):
+        BOF = bin(int('0b01111100',2)) # ASCII: |
+        EOF = bin(int('0b00001010',2)) # ASCII: \n
 
         # get count
         encoded_count = bitstring.Bits(int=self.command_count, length=32)
@@ -183,12 +183,24 @@ class GameEngineClient(ProtoModule):
         # format(self.state['game_state'], '032b')
 
         # get action
-        encoded_action,orientation = self._encode_action(action)
+        print("target dist:" + str(distance))
+        if self.state["game_state"] == 1:
+            distance = 0
+        # distance = 1
+        print("target dist:" + str(distance))
+        encoded_action,orientation = self._encode_action(action, target_distance=distance)
 
         command_arr = [BOF, encoded_count, encoded_game_state, encoded_action,  EOF]
+        command_bin = "0b"
+        for b in command_arr:
+            command_bin = command_bin+(str(b).replace("0b", "").replace("x", ""))
 
-        command = bitstring.Bits('').join(command_arr).bytes # needs to be written as bytes
-        return command,orientation
+            
+
+
+        # command = bitstring.Bits('').join(command_arr).bytes # needs to be written as bytes
+        print(command_bin)
+        return command_bin,orientation
 
 
     """
@@ -196,7 +208,7 @@ class GameEngineClient(ProtoModule):
     LEFT    ->  SOUTH
     DOWN    ->  EAST
     RIGHT   ->  NORTH
-
+    #former
     Action - Face (0) : Go Forward
     [ FB D1 D2 X X 0 D1 D2 ] (each is one bit)
 
@@ -207,41 +219,106 @@ class GameEngineClient(ProtoModule):
 
     Action - Move (1) : Go 
     [ 1 FB N0 N1 N2 N3 N4 N5 ] (each is one bit)
+    
 
     1   -   Move (1)
     FB  -   Forward (0) / Backward (1)
     N   -   Distance to move #this is either 0 or one now
+    #current
+    [ FB Dis1 Dis2 Dis3 Dis4 Dis5 Dir1 Dir2] 
+    FB   -   Forward (0) Backward(1)
+    Dir1  -   Direction 1 (N=00, S=01, E=10, W=11)
+    Dir2  -   Direction 2 (N=00, S=01, E=10, W=11)
     """
     def _encode_action(self, action: int, target_direction: int = 0, target_distance: int = 1):#TO DO: get the information regarding distance to move
+
+        """
+        >>> "{0:b}".format(37)
+        '100101'
+        """
+
+        def get_bit_string(dist: int):
+            # print("target dist:" + str(dist))
+            binary = str(bin(dist))
+            bits = str(binary).zfill(5).replace("0b","")
+            # bits = str(bin(dist))[2:]
+            # return "0" * (5 - len(bits)) + bits
+            return bits
+        
+        target_distance = get_bit_string(target_distance)
+        # print("target dist out :" + str(target_distance))
+
         #For the time being. we assume that target_distance is either 0 or 1
+        # ACTION_MAPPING = [
+        #     # Move forward
+        #     # bitstring.Bits('0b01100011'), # FACE_UP    (west)  
+        #     # bitstring.Bits('0b01000010'), # FACE_LEFT  (south)
+        #     # bitstring.Bits('0b00100001'), # FACE_DOWN  (east)
+        #     # bitstring.Bits('0b00000000'), # FACE_RIGHT (north)
+        #     bitstring.Bits('0b0{}11'.format(target_distance)), # FACE_UP    (west)  
+        #     bitstring.Bits('0b0{}10'.format(target_distance)), # FACE_LEFT  (south)
+        #     bitstring.Bits('0b0{}01'.format(target_distance)), # FACE_DOWN  (east)
+        #     bitstring.Bits('0b0{}00'.format(target_distance)), # FACE_RIGHT (north)
+            
+        #     bitstring.Bits('0b10000001'), # UP     #dummy 
+        #     bitstring.Bits('0b10000001'), # LEFT    
+        #     bitstring.Bits('0b10000001'), # DOWN   
+        #     bitstring.Bits('0b1{}01'.format(target_distance)), # RIGHT    
+
+        #     bitstring.Bits('0b00000011'), # STAY go do distance 0
+        #     bitstring.Bits('0b00000010'), # STAY go do distance 0 #dummy command for the sake of modular
+        #     bitstring.Bits('0b00000001'), # STAY go do distance 0
+        #     bitstring.Bits('0b00000000'), # STAY go do distance 0
+            
+
+        #     #go backward
+        #     #bitstring.Bits('0b11000001'), # back  
+        #     # move backward
+        #     # bitstring.Bits('0b10100001'), # FACE_DOWN  (east)  and go backward
+        #     # bitstring.Bits('0b10000000'), # FACE_RIGHT (north) and go backward
+        #     # bitstring.Bits('0b11100011'), # FACE_UP    (west)  and go backward
+        #     # bitstring.Bits('0b11000010'), # FACE_LEFT  (south) and go backward
+        #     bitstring.Bits('0b1{}01'.format(target_distance)), # FACE_DOWN  (east)  and go backward
+        #     bitstring.Bits('0b1{}00'.format(target_distance)), # FACE_RIGHT (north) and go backward
+        #     bitstring.Bits('0b1{}11'.format(target_distance)), # FACE_UP    (west)  and go backward
+        #     bitstring.Bits('0b1{}10'.format(target_distance)), # FACE_LEFT  (south) and go backward
+        # ]      
+
+
+
         ACTION_MAPPING = [
             # Move forward
-            bitstring.Bits('0b01100011'), # FACE_UP    (west)  
-            bitstring.Bits('0b01000010'), # FACE_LEFT  (south)
-            bitstring.Bits('0b00100001'), # FACE_DOWN  (east)
-            bitstring.Bits('0b00000000'), # FACE_RIGHT (north)
+            # bitstring.Bits('0b01100011'), # FACE_UP    (west)  
+            # bitstring.Bits('0b01000010'), # FACE_LEFT  (south)
+            # bitstring.Bits('0b00100001'), # FACE_DOWN  (east)
+            # bitstring.Bits('0b00000000'), # FACE_RIGHT (north)
+            '0{}11'.format(target_distance), # FACE_UP    (west)  
+            '0{}10'.format(target_distance), # FACE_LEFT  (south)
+            '0{}01'.format(target_distance), # FACE_DOWN  (east)
+            '0{}00'.format(target_distance), # FACE_RIGHT (north)
             
-            bitstring.Bits('0b10000001'), # UP     #dummy 
-            bitstring.Bits('0b10000001'), # LEFT    
-            bitstring.Bits('0b10000001'), # DOWN   
-            bitstring.Bits('0b10000001'), # RIGHT    
+            '10000001', # UP     #dummy 
+            '10000001', # LEFT    
+            '10000001', # DOWN   
+            '1{}01'.format(target_distance), # RIGHT    
 
-            bitstring.Bits('0b10000000'), # STAY go do distance 0
-            bitstring.Bits('0b10000000'), # STAY go do distance 0 #dummy command for the sake of modular
-            bitstring.Bits('0b10000000'), # STAY go do distance 0
-            bitstring.Bits('0b10000000'), # STAY go do distance 0
+            '00000011', # STAY go do distance 0
+            '00000010', # STAY go do distance 0 #dummy command for the sake of modular
+            '00000001', # STAY go do distance 0
+            '00000000', # STAY go do distance 0
             
 
             #go backward
             #bitstring.Bits('0b11000001'), # back  
             # move backward
-            bitstring.Bits('0b10100001'), # FACE_DOWN  (east)  and go backward
-            bitstring.Bits('0b10000000'), # FACE_RIGHT (north) and go backward
-            bitstring.Bits('0b11100011'), # FACE_UP    (west)  and go backward
-            bitstring.Bits('0b11000010'), # FACE_LEFT  (south) and go backward
-
-
-
+            # bitstring.Bits('0b10100001'), # FACE_DOWN  (east)  and go backward
+            # bitstring.Bits('0b10000000'), # FACE_RIGHT (north) and go backward
+            # bitstring.Bits('0b11100011'), # FACE_UP    (west)  and go backward
+            # bitstring.Bits('0b11000010'), # FACE_LEFT  (south) and go backward
+            '1{}01'.format(target_distance), # FACE_DOWN  (east)  and go backward
+            '1{}00'.format(target_distance), # FACE_RIGHT (north) and go backward
+            '1{}11'.format(target_distance), # FACE_UP    (west)  and go backward
+            '1{}10'.format(target_distance), # FACE_LEFT  (south) and go backward
         ]      
 
         ACTION_MAPPING_NAMES = [
@@ -288,12 +365,12 @@ class GameEngineClient(ProtoModule):
             action += 12
             orientation = self.orientation
 
-
+        
         # if self.old_count != self.command_count:
             # self.old_count = self.command_count
         print('-' * 15)
         print("command action: " + ACTION_MAPPING_NAMES[action])
-        print("command action: " + str(bin(int(str(ACTION_MAPPING[action]),16))))
+        print("command action: " + str(bin(int(ACTION_MAPPING[action],2))))
         print("facing: " + ACTION_MAPPING_NAMES[self.orientation + 4])
         print("command count: " + str(self.command_count))
 
@@ -320,8 +397,7 @@ class GameEngineClient(ProtoModule):
         pos_buf.direction = self.cur_dir
         # self.write(pos_buf.SerializeToString(), MsgType.PACMAN_LOCATION)
     
-            
-        return ACTION_MAPPING[action],orientation
+        return bin(int(ACTION_MAPPING[action],2)) ,orientation
     
     def _increment_count(self):
         # we want to avoid sending \n to robot
@@ -337,7 +413,7 @@ class GameEngineClient(ProtoModule):
     def _write(self, encoded_cmd):
         # writes command over bluetooth
         # TODO: handle bluetooth connection failure
-        self.ser.write(encoded_cmd)
+        self.ser.write(bytes(int(encoded_cmd,2)))
 
         
     def _read(self):
@@ -422,7 +498,7 @@ class GameEngineClient(ProtoModule):
     def tick(self):
         if self.state:
             # action = self.last_action
-            action, _ = self.policy.get_action(self.state)
+            action, distance = self.policy.get_action(self.state)
 
             # TODO: wait for this to be acknowledged first by robot before update
 
@@ -443,7 +519,8 @@ class GameEngineClient(ProtoModule):
 
             # if not 
             # send message
-            encoded_cmd, orientation = self._encode_command(action)
+            encoded_cmd, orientation = self._encode_command(action, distance)
+
             self._write(encoded_cmd)
             # read acknowledgement message
             self._read_ack(action, orientation)

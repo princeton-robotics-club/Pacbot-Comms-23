@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import codecs
 import os
 import time
 import bitstring
@@ -192,23 +193,20 @@ class GameEngineClient(ProtoModule):
 
               
             #turn around
-            bitstring.Bits('0b00000000'), # FACE_UP      
-            bitstring.Bits('0b00100001'), # FACE_LEFT   
-            bitstring.Bits('0b01000010'), # FACE_DOWN   
-            bitstring.Bits('0b01100011'), # FACE_RIGHT 
+            bitstring.Bits('0b00011100'), # FACE_UP      
+            bitstring.Bits('0b00011101'), # FACE_LEFT   
+            bitstring.Bits('0b00011110'), # FACE_DOWN   
+            bitstring.Bits('0b00011111'), # FACE_RIGHT 
 
             
             bitstring.Bits('0b10000000'), # STAY go do distance 0 
 
             
             # #Move backward
-            bitstring.Bits('0b10000000'), # BACK_UP       
-            bitstring.Bits('0b10100001'), # BACK_LEFT     
-            bitstring.Bits('0b11000010'), # BACK_DOWN     
-            bitstring.Bits('0b11100011'), # BACK_RIGHT  
-            
-            
-
+            bitstring.Bits('0b10011100'), # BACK_UP       
+            bitstring.Bits('0b10011101'), # BACK_LEFT     
+            bitstring.Bits('0b10011110'), # BACK_DOWN     
+            bitstring.Bits('0b10011111'), # BACK_RIGHT  
             #go backward
             bitstring.Bits('0b11000001'), # back  
         ]     
@@ -279,14 +277,15 @@ class GameEngineClient(ProtoModule):
 
         
     def _read(self):
-        # writes command over bluetooth
+        # reads command over bluetooth
         # TODO: handle bluetooth connection failure
         msg = self.ser.read_until(expected=b'\n') # size is number of bytes
         self.ser.reset_input_buffer()
-        print("received ack: " + str(msg))
+        print("received: " + str(msg))
 
         if len(msg) != 7:
             msg = self.ser.read_until(expected=b'\n')
+            print("received: " + str(msg))
 
         if len(msg) != 7:
             print("error: dropped byte(s)!")
