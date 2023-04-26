@@ -12,6 +12,10 @@ FREQUENCY = 30
 class MovementProcessor(rm.ProtoModule):
     def __init__(self, addr, port, cam_id, y_off, height, width, show_windows, flip_v=False, flip_h=False):
         super().__init__(addr, port, message_buffers, MsgType, FREQUENCY)
+        self.cam_id = cam_id
+        # if cam_id != 0:
+        #     self.cap = cv2.VideoCapture("http://10.8.76.206:8080/video")
+        # else:
         self.cap = cv2.VideoCapture(cam_id)
         self.cap.set(3,640)
         self.cap.set(4,360)
@@ -53,6 +57,9 @@ class MovementProcessor(rm.ProtoModule):
 
         warped_blur = cv2.medianBlur(warped, 5)
         hsv = cv2.cvtColor(warped_blur, cv2.COLOR_BGR2HSV)
+        # if self.cam_id != 1:
+        #     mask = cv2.inRange(hsv, lower_yellow2, upper_yellow2)
+        # else:
         mask = cv2.inRange(hsv, lower_yellow, upper_yellow)
         res = cv2.bitwise_and(warped, warped, mask=mask)
         res = cv2.cvtColor(res,cv2.COLOR_HSV2BGR)
@@ -65,7 +72,11 @@ class MovementProcessor(rm.ProtoModule):
 
         if len(contours) != 0:
             c = max(contours, key = cv2.contourArea)
-            if cv2.contourArea(c) > 500:
+            countour_thresh = 500
+            if self.cam_id != 1:
+                countour_thresh = 500
+
+            if cv2.contourArea(c) > countour_thresh:
                 # print(cv2.contourArea(c))
                 skip = False
                 x, y, w, h = cv2.boundingRect(c)

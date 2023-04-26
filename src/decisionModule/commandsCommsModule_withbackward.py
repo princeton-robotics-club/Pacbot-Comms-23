@@ -7,6 +7,7 @@ from robomodules import ProtoModule
 from messages import MsgType, message_buffers, LightState, PacmanState
 import serial
 from Pacbot_High_Level.policies.high_level_policy import HighLevelPolicy
+from Pacbot_High_Level.policies.jump_start_policy import JumpStartPolicy
 from Pacbot_High_Level.rl.grid import grid
 from Pacbot_High_Level.rl.variables import o, O
 from Pacbot_High_Level.constants import *
@@ -157,6 +158,16 @@ class GameEngineClient(ProtoModule):
         # update last_score
         self.last_score = msg.score
 
+
+    def get_bit_string(self, i: int, length):
+        # print("target dist:" + str(dist))
+        binary = str(bin(i))
+        bits = str(binary).replace("0b","").zfill(length)
+        # print("bits " + str(bits))
+        # bits = str(bin(dist))[2:]
+        # return "0" * (5 - len(bits)) + bits
+        return bits
+
     """ _encode_command :
     takes in action and returns an encoded action in the following format
 
@@ -171,35 +182,41 @@ class GameEngineClient(ProtoModule):
 
     """
     def _encode_command(self, action: int, distance : int):
-        BOF = bin(int('0b01111100',2)) # ASCII: |
-        EOF = bin(int('0b00001010',2)) # ASCII: \n
+        BOF = self.get_bit_string(int('0b01111100',2), 8) # ASCII: |
+        EOF = self.get_bit_string(int('0b00001010',2), 8) # ASCII: \n
 
         # get count
-        encoded_count = bitstring.Bits(int=self.command_count, length=32)
+        # encoded_count = bitstring.Bits(int=self.command_count, length=32)
+        # print("command count sent:" + str(self.command_count))
+        encoded_count = self.get_bit_string(self.command_count, 32)
         # format(self.command_count, '032b')
 
         # get game state
-        encoded_game_state = bitstring.Bits(int=self.state["game_state"], length=8)
+        # encoded_game_state = bitstring.Bits(int=self.state["game_state"], length=8)
+        encoded_game_state = self.get_bit_string(self.state["game_state"], 8)
         # format(self.state['game_state'], '032b')
 
         # get action
-        print("target dist:" + str(distance))
+        # print("target dist:" + str(distance))
         if self.state["game_state"] == 1:
             distance = 0
         # distance = 1
-        print("target dist:" + str(distance))
+        # print("target dist:" + str(distance))
         encoded_action,orientation = self._encode_action(action, target_distance=distance)
 
         command_arr = [BOF, encoded_count, encoded_game_state, encoded_action,  EOF]
         command_bin = "0b"
+        # print("enc action: " + str(encoded_action))
         for b in command_arr:
             command_bin = command_bin+(str(b).replace("0b", "").replace("x", ""))
-
+            # command_bin = command_bin+b
+        # print(str(command_bin))
+        # print(str(command_bin))
             
 
 
         # command = bitstring.Bits('').join(command_arr).bytes # needs to be written as bytes
-        print(command_bin)
+        # print(command_bin)
         return command_bin,orientation
 
 
@@ -239,13 +256,15 @@ class GameEngineClient(ProtoModule):
 
         def get_bit_string(dist: int):
             # print("target dist:" + str(dist))
+            
             binary = str(bin(dist))
-            bits = str(binary).zfill(5).replace("0b","")
+            bits = str(binary).replace("0b","").zfill(5)
             # bits = str(bin(dist))[2:]
             # return "0" * (5 - len(bits)) + bits
             return bits
-        
+        print("dist int " + str(target_distance))
         target_distance = get_bit_string(target_distance)
+        print("dist bits " + str(target_distance))
         # print("target dist out :" + str(target_distance))
 
         #For the time being. we assume that target_distance is either 0 or 1
@@ -284,7 +303,7 @@ class GameEngineClient(ProtoModule):
         #     bitstring.Bits('0b1{}10'.format(target_distance)), # FACE_LEFT  (south) and go backward
         # ]      
 
-
+        
 
         ACTION_MAPPING = [
             # Move forward
@@ -293,7 +312,8 @@ class GameEngineClient(ProtoModule):
             # bitstring.Bits('0b00100001'), # FACE_DOWN  (east)
             # bitstring.Bits('0b00000000'), # FACE_RIGHT (north)
             '0{}11'.format(target_distance), # FACE_UP    (west)  
-            '0{}10'.format(target_distance), # FACE_LEFT  (south)
+            # '0{}10'.format(target_distance), # FACE_LEFT  (south)
+            '1{}00'.format(target_distance), # FACE_RIGHT (north) and go backward
             '0{}01'.format(target_distance), # FACE_DOWN  (east)
             '0{}00'.format(target_distance), # FACE_RIGHT (north)
             
@@ -344,18 +364,6 @@ class GameEngineClient(ProtoModule):
             "GO BACK FACING SOUTH",
         ]   
 
-        # UP = 0
-        # LEFT = 1
-        # DOWN = 2
-        # RIGHT = 3
-        # FACE_UP = 4
-        # FACE_LEFT = 5
-        # FACE_DOWN = 6
-        # FACE_RIGHT = 7
-        # STAY = 8
-        # MOVE_TICKS = 6
-        # TURN_TICKS = 36
-
         orientation = action%4
 
         #forward or backward
@@ -370,7 +378,8 @@ class GameEngineClient(ProtoModule):
             # self.old_count = self.command_count
         print('-' * 15)
         print("command action: " + ACTION_MAPPING_NAMES[action])
-        print("command action: " + str(bin(int(ACTION_MAPPING[action],2))))
+        print("command action: " + ACTION_MAPPING[action])
+        print("command distance: " + str(target_distance))
         print("facing: " + ACTION_MAPPING_NAMES[self.orientation + 4])
         print("command count: " + str(self.command_count))
 
@@ -396,8 +405,9 @@ class GameEngineClient(ProtoModule):
         pos_buf.y = self.pacbot_pos[1]
         pos_buf.direction = self.cur_dir
         # self.write(pos_buf.SerializeToString(), MsgType.PACMAN_LOCATION)
+
     
-        return bin(int(ACTION_MAPPING[action],2)) ,orientation
+        return ACTION_MAPPING[action] ,orientation
     
     def _increment_count(self):
         # we want to avoid sending \n to robot
@@ -413,7 +423,25 @@ class GameEngineClient(ProtoModule):
     def _write(self, encoded_cmd):
         # writes command over bluetooth
         # TODO: handle bluetooth connection failure
-        self.ser.write(bytes(int(encoded_cmd,2)))
+        # print("encoded cmd: " + str(encoded_cmd))
+        def bitstring_to_bytes(s):
+            print(str(s))
+            v = int(s, 2)
+            b = bytearray()
+            i = 0
+            while i < 8:
+                b.append(v & 0xff)
+                # print(v & 0xff)
+                v >>= 8
+                i += 1
+            return bytes(b[::-1])
+        byte_command = bitstring_to_bytes(encoded_cmd)
+        print("sent: " + str(byte_command))
+
+        a = bitstring.Bits(str(encoded_cmd))
+        print(len(str(encoded_cmd)))
+        print(str(a.bytes))
+        self.ser.write(byte_command)
 
         
     def _read(self):
@@ -421,7 +449,7 @@ class GameEngineClient(ProtoModule):
         # TODO: handle bluetooth connection failure
         msg = self.ser.read_until(expected=b'\n') # size is number of bytes
         self.ser.reset_input_buffer()
-        # print(str(msg))
+        print("received: " + str(msg))
 
         if len(msg) != 7:
             msg = self.ser.read_until(expected=b'\n')
@@ -448,7 +476,7 @@ class GameEngineClient(ProtoModule):
         # read ack from robot (rotation ack)
         (count, ack) = self._read()
         # print("command sent: " + str(self.command_count))
-        # print("acknowledged num: " + str(count))
+        print("acknowledged num: " + str(count))
 
         if count > self.command_count:
             self.command_count = count
@@ -499,6 +527,11 @@ class GameEngineClient(ProtoModule):
         if self.state:
             # action = self.last_action
             action, distance = self.policy.get_action(self.state)
+            print("command: " + str(action))
+            print("distance: " + str(distance))
+   
+            # distance = 1
+            # print("distance: " + str(distance))
 
             # TODO: wait for this to be acknowledged first by robot before update
 

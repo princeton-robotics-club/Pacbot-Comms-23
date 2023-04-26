@@ -21,7 +21,7 @@ def main():
         sys.exit(1)
     if top:
         # 0
-        camera_number = 2
+        camera_number = 0
         processor = MovementProcessor(ADDRESS, PORT, camera_number, 15, 16, 27, windows, flip_v, flip_h)
     elif bottom:
         # 1
