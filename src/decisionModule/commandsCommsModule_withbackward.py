@@ -46,7 +46,7 @@ BLUETOOTH_MODULE_NAME = '/dev/cu.PURC_HC05_9'
 
 
 class GameEngineClient(ProtoModule):
-    def __init__(self, addr, port, disable_bluetooth=False):
+    def __init__(self, addr, port, disable_bluetooth=False, debug=False):
         self.subscriptions = [MsgType.LIGHT_STATE]
         print("connecting to server.py...")
         super().__init__(addr, port, message_buffers, MsgType, GAME_ENGINE_FREQUENCY, self.subscriptions)
@@ -74,9 +74,15 @@ class GameEngineClient(ProtoModule):
 
         self.prev_pos = (14, 7) #starting coordinates
 
-        self.last_action = 8
-
         self.life_count = 3
+
+        self.debug = debug
+
+        # stuck timeout
+        self.stuck_time_out = 3.0 # sec
+        self.stuck_time_counter = 0.0
+        self.previous_action = STAY
+        self.previous_previous_action = STAY
 
 
 
@@ -94,11 +100,24 @@ class GameEngineClient(ProtoModule):
         self.pacbot_starting_pos = [14, 7]
         self.pacbot_pos = [self.pacbot_starting_pos[0], self.pacbot_starting_pos[1]]
 
+    def debug():
+        pass
+
+
     def _frightened_timer(self):
         self.loop.call_later(1 / HARVARD_ENGINE_FREQUENCY, self._frightened_timer)
         self.ticks_passed += 1
         if self.ticks_passed % 12 == 0 and self.frightened_timer > 0:
             self.frightened_timer -= 1
+    
+    def _stuck_timer(self):
+        self.loop.call_later(1 / HARVARD_ENGINE_FREQUENCY, self._stuck_timer)
+        if self.stuck:
+            self.stuck_ticks_passed += 1
+            if self.stuck_ticks_passed % 72 == 0:
+                pass # do timeout thing
+        else:
+            self.stuck_ticks_passed = 0
 
     def _parse_light(self, msg: LightState):
         # check for life lost
@@ -159,13 +178,10 @@ class GameEngineClient(ProtoModule):
         self.last_score = msg.score
 
 
+    # convert int to bits of len=length (leading 0's)
     def get_bit_string(self, i: int, length):
-        # print("target dist:" + str(dist))
         binary = str(bin(i))
         bits = str(binary).replace("0b","").zfill(length)
-        # print("bits " + str(bits))
-        # bits = str(bin(dist))[2:]
-        # return "0" * (5 - len(bits)) + bits
         return bits
 
     """ _encode_command :
@@ -185,38 +201,24 @@ class GameEngineClient(ProtoModule):
         BOF = self.get_bit_string(int('0b01111100',2), 8) # ASCII: |
         EOF = self.get_bit_string(int('0b00001010',2), 8) # ASCII: \n
 
-        # get count
-        # encoded_count = bitstring.Bits(int=self.command_count, length=32)
-        # print("command count sent:" + str(self.command_count))
-        encoded_count = self.get_bit_string(self.command_count, 32)
-        # format(self.command_count, '032b')
-
-        # get game state
-        # encoded_game_state = bitstring.Bits(int=self.state["game_state"], length=8)
-        encoded_game_state = self.get_bit_string(self.state["game_state"], 8)
-        # format(self.state['game_state'], '032b')
-
-        # get action
-        # print("target dist:" + str(distance))
+        # check for bad gamestate
         if self.state["game_state"] == 1:
             distance = 0
-        # distance = 1
-        # print("target dist:" + str(distance))
+
+        # get count
+        encoded_count = self.get_bit_string(self.command_count, 32)
+
+        # get game state
+        encoded_game_state = self.get_bit_string(self.state["game_state"], 8)
+
+        # get action
         encoded_action,orientation = self._encode_action(action, target_distance=distance)
 
         command_arr = [BOF, encoded_count, encoded_game_state, encoded_action,  EOF]
         command_bin = "0b"
-        # print("enc action: " + str(encoded_action))
         for b in command_arr:
             command_bin = command_bin+(str(b).replace("0b", "").replace("x", ""))
-            # command_bin = command_bin+b
-        # print(str(command_bin))
-        # print(str(command_bin))
-            
 
-
-        # command = bitstring.Bits('').join(command_arr).bytes # needs to be written as bytes
-        # print(command_bin)
         return command_bin,orientation
 
 
@@ -249,59 +251,11 @@ class GameEngineClient(ProtoModule):
     """
     def _encode_action(self, action: int, target_direction: int = 0, target_distance: int = 1):#TO DO: get the information regarding distance to move
 
-        """
-        >>> "{0:b}".format(37)
-        '100101'
-        """
-
         def get_bit_string(dist: int):
-            # print("target dist:" + str(dist))
-            
             binary = str(bin(dist))
             bits = str(binary).replace("0b","").zfill(5)
-            # bits = str(bin(dist))[2:]
-            # return "0" * (5 - len(bits)) + bits
             return bits
-        print("dist int " + str(target_distance))
-        target_distance = get_bit_string(target_distance)
-        print("dist bits " + str(target_distance))
-        # print("target dist out :" + str(target_distance))
-
-        #For the time being. we assume that target_distance is either 0 or 1
-        # ACTION_MAPPING = [
-        #     # Move forward
-        #     # bitstring.Bits('0b01100011'), # FACE_UP    (west)  
-        #     # bitstring.Bits('0b01000010'), # FACE_LEFT  (south)
-        #     # bitstring.Bits('0b00100001'), # FACE_DOWN  (east)
-        #     # bitstring.Bits('0b00000000'), # FACE_RIGHT (north)
-        #     bitstring.Bits('0b0{}11'.format(target_distance)), # FACE_UP    (west)  
-        #     bitstring.Bits('0b0{}10'.format(target_distance)), # FACE_LEFT  (south)
-        #     bitstring.Bits('0b0{}01'.format(target_distance)), # FACE_DOWN  (east)
-        #     bitstring.Bits('0b0{}00'.format(target_distance)), # FACE_RIGHT (north)
-            
-        #     bitstring.Bits('0b10000001'), # UP     #dummy 
-        #     bitstring.Bits('0b10000001'), # LEFT    
-        #     bitstring.Bits('0b10000001'), # DOWN   
-        #     bitstring.Bits('0b1{}01'.format(target_distance)), # RIGHT    
-
-        #     bitstring.Bits('0b00000011'), # STAY go do distance 0
-        #     bitstring.Bits('0b00000010'), # STAY go do distance 0 #dummy command for the sake of modular
-        #     bitstring.Bits('0b00000001'), # STAY go do distance 0
-        #     bitstring.Bits('0b00000000'), # STAY go do distance 0
-            
-
-        #     #go backward
-        #     #bitstring.Bits('0b11000001'), # back  
-        #     # move backward
-        #     # bitstring.Bits('0b10100001'), # FACE_DOWN  (east)  and go backward
-        #     # bitstring.Bits('0b10000000'), # FACE_RIGHT (north) and go backward
-        #     # bitstring.Bits('0b11100011'), # FACE_UP    (west)  and go backward
-        #     # bitstring.Bits('0b11000010'), # FACE_LEFT  (south) and go backward
-        #     bitstring.Bits('0b1{}01'.format(target_distance)), # FACE_DOWN  (east)  and go backward
-        #     bitstring.Bits('0b1{}00'.format(target_distance)), # FACE_RIGHT (north) and go backward
-        #     bitstring.Bits('0b1{}11'.format(target_distance)), # FACE_UP    (west)  and go backward
-        #     bitstring.Bits('0b1{}10'.format(target_distance)), # FACE_LEFT  (south) and go backward
-        # ]      
+        target_distance_bits = get_bit_string(target_distance)
 
         
 
@@ -311,16 +265,16 @@ class GameEngineClient(ProtoModule):
             # bitstring.Bits('0b01000010'), # FACE_LEFT  (south)
             # bitstring.Bits('0b00100001'), # FACE_DOWN  (east)
             # bitstring.Bits('0b00000000'), # FACE_RIGHT (north)
-            '0{}11'.format(target_distance), # FACE_UP    (west)  
+            '0{}11'.format(target_distance_bits), # FACE_UP    (west)  
             # '0{}10'.format(target_distance), # FACE_LEFT  (south)
-            '1{}00'.format(target_distance), # FACE_RIGHT (north) and go backward
-            '0{}01'.format(target_distance), # FACE_DOWN  (east)
-            '0{}00'.format(target_distance), # FACE_RIGHT (north)
+            '1{}00'.format(target_distance_bits), # FACE_RIGHT (north) and go backward
+            '0{}01'.format(target_distance_bits), # FACE_DOWN  (east)
+            '0{}00'.format(target_distance_bits), # FACE_RIGHT (north)
             
             '10000001', # UP     #dummy 
             '10000001', # LEFT    
             '10000001', # DOWN   
-            '1{}01'.format(target_distance), # RIGHT    
+            '1{}01'.format(target_distance_bits), # RIGHT    
 
             '00000011', # STAY go do distance 0
             '00000010', # STAY go do distance 0 #dummy command for the sake of modular
@@ -335,10 +289,10 @@ class GameEngineClient(ProtoModule):
             # bitstring.Bits('0b10000000'), # FACE_RIGHT (north) and go backward
             # bitstring.Bits('0b11100011'), # FACE_UP    (west)  and go backward
             # bitstring.Bits('0b11000010'), # FACE_LEFT  (south) and go backward
-            '1{}01'.format(target_distance), # FACE_DOWN  (east)  and go backward
-            '1{}00'.format(target_distance), # FACE_RIGHT (north) and go backward
-            '1{}11'.format(target_distance), # FACE_UP    (west)  and go backward
-            '1{}10'.format(target_distance), # FACE_LEFT  (south) and go backward
+            '1{}01'.format(target_distance_bits), # FACE_DOWN  (east)  and go backward
+            '1{}00'.format(target_distance_bits), # FACE_RIGHT (north) and go backward
+            '1{}11'.format(target_distance_bits), # FACE_UP    (west)  and go backward
+            '1{}10'.format(target_distance_bits), # FACE_LEFT  (south) and go backward
         ]      
 
         ACTION_MAPPING_NAMES = [
@@ -366,16 +320,14 @@ class GameEngineClient(ProtoModule):
 
         orientation = action%4
 
-        #forward or backward
+        # forward or backward
         inverse_orientation_map = {0:2,1:3,2:0,3:1}
-        #assume that 0<=action <4
+        # assume that 0<=action <4
         if action <4 and self.orientation == inverse_orientation_map[action %4]: 
             action += 12
             orientation = self.orientation
 
         
-        # if self.old_count != self.command_count:
-            # self.old_count = self.command_count
         print('-' * 15)
         print("command action: " + ACTION_MAPPING_NAMES[action])
         print("command action: " + ACTION_MAPPING[action])
@@ -404,7 +356,6 @@ class GameEngineClient(ProtoModule):
         pos_buf.x = self.pacbot_pos[0]
         pos_buf.y = self.pacbot_pos[1]
         pos_buf.direction = self.cur_dir
-        # self.write(pos_buf.SerializeToString(), MsgType.PACMAN_LOCATION)
 
     
         return ACTION_MAPPING[action] ,orientation
@@ -422,8 +373,6 @@ class GameEngineClient(ProtoModule):
  
     def _write(self, encoded_cmd):
         # writes command over bluetooth
-        # TODO: handle bluetooth connection failure
-        # print("encoded cmd: " + str(encoded_cmd))
         def bitstring_to_bytes(s):
             print(str(s))
             v = int(s, 2)
@@ -431,16 +380,10 @@ class GameEngineClient(ProtoModule):
             i = 0
             while i < 8:
                 b.append(v & 0xff)
-                # print(v & 0xff)
                 v >>= 8
                 i += 1
             return bytes(b[::-1])
         byte_command = bitstring_to_bytes(encoded_cmd)
-        print("sent: " + str(byte_command))
-
-        a = bitstring.Bits(str(encoded_cmd))
-        print(len(str(encoded_cmd)))
-        print(str(a.bytes))
         self.ser.write(byte_command)
 
         
@@ -472,7 +415,7 @@ class GameEngineClient(ProtoModule):
         ack = True
         return (count, ack)
     
-    def _read_ack(self, action,orientation):
+    def _read_ack(self, action, orientation):
         # read ack from robot (rotation ack)
         (count, ack) = self._read()
         # print("command sent: " + str(self.command_count))
@@ -491,10 +434,11 @@ class GameEngineClient(ProtoModule):
 
         
         # read ack from game engine (movement ack)
-        if self.state["pac"][0] != self.prev_pos[0] and self.state["pac"][1] != self.prev_pos[1]:
+        if self.state["pac"][0] != self.prev_pos[0] or self.state["pac"][1] != self.prev_pos[1]:
             self.prev_pos = (self.state["pac"][0], self.state["pac"][1])
             self._increment_count()
             return
+        
         
     
     def _move_if_valid_dir(self, direction, x, y):
@@ -525,10 +469,29 @@ class GameEngineClient(ProtoModule):
 
     def tick(self):
         if self.state:
-            # action = self.last_action
             action, distance = self.policy.get_action(self.state)
             print("command: " + str(action))
             print("distance: " + str(distance))
+            if distance > 5:
+                distance = 5
+
+
+            # after timeout and no change to position, escape position (probably stuck on a corner)
+            if (self.state["pac"][0] == self.prev_pos[0]        # stuck and not STAY command
+                and self.state["pac"][1] == self.prev_pos[1]
+                and action != STAY):
+
+                self.potential_stuck = True
+                # trigger timer
+
+                self.stuck_time_out
+                # timer out
+                # change action ()
+
+            # update action
+            if self.previous_action != action:
+                self.previous_action = action
+                
    
             # distance = 1
             # print("distance: " + str(distance))
