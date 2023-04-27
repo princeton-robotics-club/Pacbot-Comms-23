@@ -1,18 +1,13 @@
 #!/usr/bin/env python3
 import os
-import time
-import bitstring
 import numpy as np
 from robomodules import ProtoModule
 from messages import MsgType, message_buffers, LightState, PacmanState
 import serial
 from Pacbot_High_Level.policies.high_level_policy import HighLevelPolicy
-from Pacbot_High_Level.policies.jump_start_policy import JumpStartPolicy
 from Pacbot_High_Level.rl.grid import grid
 from Pacbot_High_Level.rl.variables import o, O
 from Pacbot_High_Level.constants import *
-import pickle
-import sys
 from messages import *
 
 # Direction enums
@@ -21,8 +16,6 @@ left = 1
 up = 2
 down = 3
 # Grid enums
-# o = normal pellet, e = empty space, O = power pellet, c = cherry position
-# I = wall, n = ghost chambers
 I = 1
 o = 2
 e = 3
@@ -30,27 +23,24 @@ O = 4
 n = 5
 c = 6
 
-
-# GAME_ENGINE_ADDRESS = os.environ.get("BIND_ADDRESS","localhost")
-# GAME_ENGINE_PORT = os.environ.get("BIND_PORT", 11297)
-# Use windows IP when connecting 
-# GAME_ENGINE_ADDRESS = os.environ.get("BIND_ADDRESS","10.9.186.78") # Pie
 GAME_ENGINE_ADDRESS = os.environ.get("BIND_ADDRESS","10.9.28.246")
 GAME_ENGINE_PORT = os.environ.get("BIND_PORT", 11297)
 
 HARVARD_ENGINE_FREQUENCY = 24.0
-# GAME_ENGINE_FREQUENCY = 48.0
 GAME_ENGINE_FREQUENCY = 2.0*8
 
 BLUETOOTH_MODULE_NAME = '/dev/cu.PURC_HC05_9'
 
 
+GHOST_MOVES_WHILE_FRIGHTENED = 40
+POWER_PELLET_VAL = 50
+
 class GameEngineClient(ProtoModule):
-    def __init__(self, addr, port, disable_bluetooth=False, debug=False):
+    def __init__(self, addr, port, debug=False):
         self.subscriptions = [MsgType.LIGHT_STATE]
-        print("connecting to server.py...")
+        self.debug("connecting to server.py...")
         super().__init__(addr, port, message_buffers, MsgType, GAME_ENGINE_FREQUENCY, self.subscriptions)
-        print("connected!")
+        self.debug("connected!")
         self.policy = HighLevelPolicy(debug=False)
         self.state = None
 
@@ -63,35 +53,26 @@ class GameEngineClient(ProtoModule):
         # checks to override this timer
         self.frightened_timer = 0
         self.ticks_passed = 0
-        self.orientation = UP #current orientation which has been confirmed by a message from the robot
-
+        self.orientation = UP # current orientation which has been confirmed by a message from the robot
         self.loop.call_soon(self._frightened_timer)
-
         self.last_score = 0
-
         self.command_count = 1
         self.old_count = 1
-
-        self.prev_pos = (14, 7) #starting coordinates
-
+        self.prev_pos = (14, 7) # starting coordinates
         self.life_count = 3
 
+        # debug
         self.debug = debug
 
-        # stuck timeout
-        self.stuck_time_out = 3.0 # sec
-        self.stuck_time_counter = 0.0
-        self.previous_action = STAY
-        self.previous_previous_action = STAY
+        # max # of squares to move threshold
+        self.threshold = 5
 
-
-
-        self.disable_bluetooth = disable_bluetooth
-        if not disable_bluetooth:
-            print("connecting to bluetooth...")
-            self.ser = serial.Serial(BLUETOOTH_MODULE_NAME, 115200, timeout=1)
-            print("connected!")
-
+        self.debug("connecting to bluetooth...")
+        myports = [tuple(p)[0] for p in list(serial.tools.list_ports.comports())]
+        if BLUETOOTH_MODULE_NAME not in myports:
+            self.debug("Bluetooth cannot be found, try making sure this device has connected to " + BLUETOOTH_MODULE_NAME + " over bluetooth.")
+        self.ser = serial.Serial(BLUETOOTH_MODULE_NAME, 115200, timeout=1)
+        self.debug("connected!")
 
 
         # funky things
@@ -100,8 +81,9 @@ class GameEngineClient(ProtoModule):
         self.pacbot_starting_pos = [14, 7]
         self.pacbot_pos = [self.pacbot_starting_pos[0], self.pacbot_starting_pos[1]]
 
-    def debug():
-        pass
+    def debug(self, msg: str):
+        if self.debug:
+            print(msg)
 
 
     def _frightened_timer(self):
@@ -109,15 +91,6 @@ class GameEngineClient(ProtoModule):
         self.ticks_passed += 1
         if self.ticks_passed % 12 == 0 and self.frightened_timer > 0:
             self.frightened_timer -= 1
-    
-    def _stuck_timer(self):
-        self.loop.call_later(1 / HARVARD_ENGINE_FREQUENCY, self._stuck_timer)
-        if self.stuck:
-            self.stuck_ticks_passed += 1
-            if self.stuck_ticks_passed % 72 == 0:
-                pass # do timeout thing
-        else:
-            self.stuck_ticks_passed = 0
 
     def _parse_light(self, msg: LightState):
         # check for life lost
@@ -169,10 +142,9 @@ class GameEngineClient(ProtoModule):
         self.pellets.discard(pac_pos)
 
         # update power pellets
-        # TODO: test this
-        if pac_pos in self.power_pellets and msg.score == self.last_score + 50:
+        if pac_pos in self.power_pellets and msg.score == self.last_score + POWER_PELLET_VAL:
             self.power_pellets.discard(pac_pos)
-            self.frightened_timer = 40  # TODO: gather all relevant constants?
+            self.frightened_timer = GHOST_MOVES_WHILE_FRIGHTENED
 
         # update last_score
         self.last_score = msg.score
@@ -261,10 +233,6 @@ class GameEngineClient(ProtoModule):
 
         ACTION_MAPPING = [
             # Move forward
-            # bitstring.Bits('0b01100011'), # FACE_UP    (west)  
-            # bitstring.Bits('0b01000010'), # FACE_LEFT  (south)
-            # bitstring.Bits('0b00100001'), # FACE_DOWN  (east)
-            # bitstring.Bits('0b00000000'), # FACE_RIGHT (north)
             '0{}11'.format(target_distance_bits), # FACE_UP    (west)  
             # '0{}10'.format(target_distance), # FACE_LEFT  (south)
             '1{}00'.format(target_distance_bits), # FACE_RIGHT (north) and go backward
@@ -281,14 +249,6 @@ class GameEngineClient(ProtoModule):
             '00000001', # STAY go do distance 0
             '00000000', # STAY go do distance 0
             
-
-            #go backward
-            #bitstring.Bits('0b11000001'), # back  
-            # move backward
-            # bitstring.Bits('0b10100001'), # FACE_DOWN  (east)  and go backward
-            # bitstring.Bits('0b10000000'), # FACE_RIGHT (north) and go backward
-            # bitstring.Bits('0b11100011'), # FACE_UP    (west)  and go backward
-            # bitstring.Bits('0b11000010'), # FACE_LEFT  (south) and go backward
             '1{}01'.format(target_distance_bits), # FACE_DOWN  (east)  and go backward
             '1{}00'.format(target_distance_bits), # FACE_RIGHT (north) and go backward
             '1{}11'.format(target_distance_bits), # FACE_UP    (west)  and go backward
@@ -322,22 +282,23 @@ class GameEngineClient(ProtoModule):
 
         # forward or backward
         inverse_orientation_map = {0:2,1:3,2:0,3:1}
-        # assume that 0<=action <4
-        if action <4 and self.orientation == inverse_orientation_map[action %4]: 
+        # assume that 0 <= action <4
+        if action < 4 and self.orientation == inverse_orientation_map[action % 4]: 
             action += 12
             orientation = self.orientation
 
         
         print('-' * 15)
         print("command action: " + ACTION_MAPPING_NAMES[action])
-        print("command action: " + ACTION_MAPPING[action])
+        self.debug("command action: " + ACTION_MAPPING[action])
         print("command distance: " + str(target_distance))
         print("facing: " + ACTION_MAPPING_NAMES[self.orientation + 4])
-        print("command count: " + str(self.command_count))
+        self.debug("command count: " + str(self.command_count))
 
         ACTION_MAPPING_COMMANDS = [
             left, down, right, up
         ]
+
         if action == STAY:
             self.next_dir = -1
             return
@@ -374,7 +335,6 @@ class GameEngineClient(ProtoModule):
     def _write(self, encoded_cmd):
         # writes command over bluetooth
         def bitstring_to_bytes(s):
-            print(str(s))
             v = int(s, 2)
             b = bytearray()
             i = 0
@@ -389,7 +349,6 @@ class GameEngineClient(ProtoModule):
         
     def _read(self):
         # writes command over bluetooth
-        # TODO: handle bluetooth connection failure
         msg = self.ser.read_until(expected=b'\n') # size is number of bytes
         self.ser.reset_input_buffer()
         print("received: " + str(msg))
@@ -398,17 +357,17 @@ class GameEngineClient(ProtoModule):
             msg = self.ser.read_until(expected=b'\n')
 
         if len(msg) != 7:
-            # print("error: dropped byte(s)!")
-            # print("bad message received: " + str(msg))
+            self.debug("error: dropped byte(s)!")
+            self.debug("bad message received: " + str(msg))
             return (-1, False)
         
         if msg[6:7] != b'\n':
-            # print(str(msg[6:7]))
-            # print("error: eof missing")
+            self.debug(str(msg[6:7]))
+            self.debug("error: eof missing")
             return (-1, False)
         if msg[0:1] != b'|':
-            # print(str(msg[0:1]))
-            # print("error: bof missing")
+            self.debug(str(msg[0:1]))
+            self.debug("error: bof missing")
             return (-1, False)
         
         count = int.from_bytes(msg[1:5], "big")
@@ -418,12 +377,10 @@ class GameEngineClient(ProtoModule):
     def _read_ack(self, action, orientation):
         # read ack from robot (rotation ack)
         (count, ack) = self._read()
-        # print("command sent: " + str(self.command_count))
-        print("acknowledged num: " + str(count))
+        self.debug("acknowledged num: " + str(count))
 
         if count > self.command_count:
             self.command_count = count
-
 
         if self.command_count == count and ack == True:
             # update orientation
@@ -432,13 +389,11 @@ class GameEngineClient(ProtoModule):
             # move on to next command
             self._increment_count()
 
-        
         # read ack from game engine (movement ack)
         if self.state["pac"][0] != self.prev_pos[0] or self.state["pac"][1] != self.prev_pos[1]:
             self.prev_pos = (self.state["pac"][0], self.state["pac"][1])
             self._increment_count()
-            return
-        
+            return   
         
     
     def _move_if_valid_dir(self, direction, x, y):
@@ -470,63 +425,22 @@ class GameEngineClient(ProtoModule):
     def tick(self):
         if self.state:
             action, distance = self.policy.get_action(self.state)
-            print("command: " + str(action))
-            print("distance: " + str(distance))
             if distance > 5:
                 distance = 5
-
-
-            # after timeout and no change to position, escape position (probably stuck on a corner)
-            if (self.state["pac"][0] == self.prev_pos[0]        # stuck and not STAY command
-                and self.state["pac"][1] == self.prev_pos[1]
-                and action != STAY):
-
-                self.potential_stuck = True
-                # trigger timer
-
-                self.stuck_time_out
-                # timer out
-                # change action ()
-
-            # update action
-            if self.previous_action != action:
-                self.previous_action = action
                 
-   
-            # distance = 1
-            # print("distance: " + str(distance))
-
-            # TODO: wait for this to be acknowledged first by robot before update
-
-            # TODO: Remove this temporary conversion from turning to actions. Put it somewhere better
-            if FACE_UP <= action < STAY:#what does it do now?
+            # remove depreciated move commands
+            if FACE_UP <= action < STAY:
                 action -= 4
-
-            # stop when game is paused
-            # if self.state["game_state"] == 1:
-            #     action = 8
-
-
-             
-
-
-            # if action > 3 and action <= 7:
-            #     print(ACTION_MAPPING_COMMANDS[action - 4], end="\n")
-
-            # if not 
-            # send message
+            
+            # write commands
             encoded_cmd, orientation = self._encode_command(action, distance)
-
             self._write(encoded_cmd)
             # read acknowledgement message
             self._read_ack(action, orientation)
 
             
 
-
-
 def main():
-
     # This module will connect to server and receive the game state
     game_engine_module = GameEngineClient(GAME_ENGINE_ADDRESS, GAME_ENGINE_PORT)
 
