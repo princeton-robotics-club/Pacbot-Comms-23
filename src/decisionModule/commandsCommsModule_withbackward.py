@@ -27,7 +27,7 @@ GAME_ENGINE_ADDRESS = os.environ.get("BIND_ADDRESS","10.9.28.246")
 GAME_ENGINE_PORT = os.environ.get("BIND_PORT", 11297)
 
 HARVARD_ENGINE_FREQUENCY = 24.0
-GAME_ENGINE_FREQUENCY = 2.0*8
+GAME_ENGINE_FREQUENCY = 2.0*8*2
 
 BLUETOOTH_MODULE_NAME = '/dev/cu.PURC_HC05_9'
 
@@ -37,6 +37,11 @@ POWER_PELLET_VAL = 50
 
 class GameEngineClient(ProtoModule):
     def __init__(self, addr, port, debug=False):
+
+        # debug
+        self.do_debug = debug
+
+
         self.subscriptions = [MsgType.LIGHT_STATE]
         self.debug("connecting to server.py...")
         super().__init__(addr, port, message_buffers, MsgType, GAME_ENGINE_FREQUENCY, self.subscriptions)
@@ -61,16 +66,11 @@ class GameEngineClient(ProtoModule):
         self.prev_pos = (14, 7) # starting coordinates
         self.life_count = 3
 
-        # debug
-        self.debug = debug
 
         # max # of squares to move threshold
         self.threshold = 5
 
         self.debug("connecting to bluetooth...")
-        myports = [tuple(p)[0] for p in list(serial.tools.list_ports.comports())]
-        if BLUETOOTH_MODULE_NAME not in myports:
-            self.debug("Bluetooth cannot be found, try making sure this device has connected to " + BLUETOOTH_MODULE_NAME + " over bluetooth.")
         self.ser = serial.Serial(BLUETOOTH_MODULE_NAME, 115200, timeout=1)
         self.debug("connected!")
 
@@ -82,7 +82,7 @@ class GameEngineClient(ProtoModule):
         self.pacbot_pos = [self.pacbot_starting_pos[0], self.pacbot_starting_pos[1]]
 
     def debug(self, msg: str):
-        if self.debug:
+        if self.do_debug:
             print(msg)
 
 
@@ -299,9 +299,9 @@ class GameEngineClient(ProtoModule):
             left, down, right, up
         ]
 
-        if action == STAY:
-            self.next_dir = -1
-            return
+        # if action == STAY:
+        #     self.next_dir = -1
+        #     return
         
         self.next_dir = ACTION_MAPPING_COMMANDS[orientation]#not checked whether it 
 
@@ -317,6 +317,10 @@ class GameEngineClient(ProtoModule):
         pos_buf.x = self.pacbot_pos[0]
         pos_buf.y = self.pacbot_pos[1]
         pos_buf.direction = self.cur_dir
+
+
+        # print("action  " + str(action))
+        # print("orientation " + str(orientation))
 
     
         return ACTION_MAPPING[action] ,orientation
@@ -425,8 +429,8 @@ class GameEngineClient(ProtoModule):
     def tick(self):
         if self.state:
             action, distance = self.policy.get_action(self.state)
-            if distance > 5:
-                distance = 5
+            # if distance > 10:
+            #     distance = 10
                 
             # remove depreciated move commands
             if FACE_UP <= action < STAY:
@@ -435,8 +439,10 @@ class GameEngineClient(ProtoModule):
             # write commands
             encoded_cmd, orientation = self._encode_command(action, distance)
             self._write(encoded_cmd)
+
             # read acknowledgement message
             self._read_ack(action, orientation)
+
 
             
 

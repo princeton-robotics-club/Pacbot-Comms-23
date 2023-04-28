@@ -1,0 +1,21 @@
+
+
+
+Pacbot 2: 510
+Jack's pacbot no wall align: 2880
+Jack's pacbot no wall align: 2010
+New wall align: 2920
+Wait ghost: 1390
+remove ghost wait: 2210
+lower max speed: 1660
+ii: 2240
+no movement threshold: 3000
+ii: 2210
+no rotate timer: 1660
+pellets only: 1200
+normal + pellets only: 2240
+ii: 2520
+follow thru v1: 650
+Fix stupid rotations + follow thru: 2940
+ii: 2330
+ii: 2830
