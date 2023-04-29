@@ -1,6 +1,6 @@
 
 
-
+Night before travel:
 Pacbot 2: 510
 Jack's pacbot no wall align: 2880
 Jack's pacbot no wall align: 2010
@@ -19,3 +19,9 @@ follow thru v1: 650
 Fix stupid rotations + follow thru: 2940
 ii: 2330
 ii: 2830
+
+Game Day:
+wall align 1.0: 2240
+wall align 2.0: 2990
+testing overshoot: 2800
+decrease stuck threshold time (2.5->1.75): 3250

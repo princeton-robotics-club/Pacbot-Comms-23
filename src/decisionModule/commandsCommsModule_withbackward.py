@@ -23,7 +23,7 @@ O = 4
 n = 5
 c = 6
 
-GAME_ENGINE_ADDRESS = os.environ.get("BIND_ADDRESS","10.9.28.246")
+GAME_ENGINE_ADDRESS = os.environ.get("BIND_ADDRESS","192.168.0.100")
 GAME_ENGINE_PORT = os.environ.get("BIND_PORT", 11297)
 
 HARVARD_ENGINE_FREQUENCY = 24.0
@@ -429,8 +429,8 @@ class GameEngineClient(ProtoModule):
     def tick(self):
         if self.state:
             action, distance = self.policy.get_action(self.state)
-            # if distance > 10:
-            #     distance = 10
+            if distance > 31:
+                distance = 31
                 
             # remove depreciated move commands
             if FACE_UP <= action < STAY:
